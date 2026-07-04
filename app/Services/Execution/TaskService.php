@@ -11,7 +11,6 @@ use App\Models\Task;
 use App\Models\TaskAssignment;
 use App\Models\User;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 
 class TaskService
@@ -290,13 +289,19 @@ class TaskService
 
     public function addAttachmentFile(Task $task, User $uploader, UploadedFile $file): Attachment
     {
-        $path = $file->store('attachments', 'public');
+        // Task 2.9: files write to the private 'local' disk (storage/app/private,
+        // never web-accessible directly) instead of the 'storage_files' disk
+        // used briefly in task 2.8. `file_url` now holds a relative disk path,
+        // not a resolvable public URL — access is only ever through
+        // AttachmentDownloadController (auth + project-membership checked,
+        // same rule as Tasks\Show::mount()), never a raw static file request.
+        $path = $file->store('attachments', 'local');
 
         $attachment = Attachment::create([
             'task_id' => $task->id,
             'uploaded_by' => $uploader->id,
             'file_name' => $file->getClientOriginalName(),
-            'file_url' => Storage::disk('public')->url($path),
+            'file_url' => $path,
             'file_type' => $file->getClientMimeType(),
             'file_size' => $file->getSize(),
         ]);

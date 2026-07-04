@@ -129,7 +129,11 @@ class TaskCollaborationTest extends TestCase
 
     public function test_member_can_upload_file_attachment_via_real_form(): void
     {
-        Storage::fake('public');
+        // Task 2.9: files now write to the private 'local' disk, never a
+        // publicly-servable one — access is only ever through
+        // AttachmentDownloadController (see AttachmentDownloadTest.php),
+        // not a direct URL.
+        Storage::fake('local');
 
         $admin = $this->admin();
         $member = $this->executionMember('Ahmad');
@@ -148,8 +152,39 @@ class TaskCollaborationTest extends TestCase
         $this->assertSame('progres.png', $attachment->file_name);
         $this->assertNotSame('link', $attachment->file_type);
         $this->assertNotNull($attachment->file_size);
-        Storage::disk('public')->assertExists('attachments/'.basename($attachment->file_url));
+        Storage::disk('local')->assertExists($attachment->file_url);
+
+        // file_url is a relative disk path now, never a resolvable public URL.
+        $this->assertStringNotContainsString('http', $attachment->file_url);
+        $this->assertStringNotContainsString('/storage_files/', $attachment->file_url);
+        $this->assertStringNotContainsString('/storage/', $attachment->file_url);
+
         $this->assertDatabaseHas('activity_logs', ['task_id' => $task->id, 'action_type' => 'attachment_added']);
+    }
+
+    public function test_uploaded_attachment_is_only_reachable_through_the_access_checked_download_route(): void
+    {
+        Storage::fake('local');
+
+        $admin = $this->admin();
+        $member = $this->executionMember('Ahmad');
+        $task = $this->taskWithProject($admin);
+        ProjectMember::create(['project_id' => $task->project_id, 'user_id' => $member->id]);
+
+        Livewire::actingAs($member)->test(Show::class, ['task' => $task])
+            ->set('attachmentMode', 'file')
+            ->set('attachmentFile', UploadedFile::fake()->image('progres.png'))
+            ->call('addAttachment');
+
+        $attachment = \App\Models\Attachment::where('task_id', $task->id)->first();
+
+        $rendered = Livewire::actingAs($member)->test(Show::class, ['task' => $task])->html();
+        $this->assertStringContainsString('/attachments/'.$attachment->id.'/download', $rendered);
+
+        $this->actingAs($member)->get('/attachments/'.$attachment->id.'/download')->assertOk();
+
+        $outsider = $this->executionMember('Bilal');
+        $this->actingAs($outsider)->get('/attachments/'.$attachment->id.'/download')->assertForbidden();
     }
 
     public function test_member_can_add_link_attachment_via_real_form(): void

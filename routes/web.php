@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Auth\LogoutController;
+use App\Http\Controllers\Eksekusi\AttachmentDownloadController;
 use App\Livewire\Admin\Dashboard as AdminDashboard;
 use App\Livewire\Admin\Users\Create as UsersCreate;
 use App\Livewire\Admin\Users\Edit as UsersEdit;
@@ -87,6 +88,10 @@ Route::middleware(['auth', 'role:execution_member,admin'])->prefix('eksekusi/pro
 Route::middleware(['auth', 'role:execution_member,admin'])->prefix('eksekusi/tasks')->name('eksekusi.tasks.')->group(function () {
     Route::get('/{task}', TasksShow::class)->name('show');
 });
+
+Route::get('/attachments/{attachment}/download', AttachmentDownloadController::class)
+    ->middleware(['auth', 'role:execution_member,admin'])
+    ->name('attachments.download');
 
 Route::middleware(['auth', 'role:admin'])->prefix('admin/users')->name('admin.users.')->group(function () {
     Route::get('/', UsersIndex::class)->name('index');

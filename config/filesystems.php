@@ -30,6 +30,13 @@ return [
 
     'disks' => [
 
+        /*
+         * Task 2.9: task attachment files (App\Services\Execution\TaskService::addAttachmentFile())
+         * write here — never web-accessible directly. Served only through
+         * App\Http\Controllers\Eksekusi\AttachmentDownloadController, which
+         * checks auth + project membership before streaming (same rule as
+         * App\Livewire\Eksekusi\Tasks\Show::mount()).
+         */
         'local' => [
             'driver' => 'local',
             'root' => storage_path('app/private'),
@@ -42,6 +49,28 @@ return [
             'driver' => 'local',
             'root' => storage_path('app/public'),
             'url' => rtrim(env('APP_URL', 'http://localhost'), '/').'/storage',
+            'visibility' => 'public',
+            'throw' => false,
+            'report' => false,
+        ],
+
+        /*
+         * LEGACY — no longer written to. Briefly used (task 2.8) for task
+         * attachment files, publicly servable with no `storage:link` symlink
+         * needed (production host disables symlink() entirely). Superseded
+         * by task 2.9: attachments now write to the private 'local' disk
+         * above and are only ever served through
+         * App\Http\Controllers\Eksekusi\AttachmentDownloadController (auth +
+         * project-membership checked), because this disk had zero access
+         * control — anyone with a file's URL could view it. Kept configured
+         * only so AttachmentDownloadController's fallback can still read any
+         * attachment that was uploaded during the brief 2.8-to-2.9 window
+         * (none exist as of 2.9, confirmed live).
+         */
+        'storage_files' => [
+            'driver' => 'local',
+            'root' => public_path('storage_files'),
+            'url' => rtrim(env('APP_URL', 'http://localhost'), '/').'/storage_files',
             'visibility' => 'public',
             'throw' => false,
             'report' => false,

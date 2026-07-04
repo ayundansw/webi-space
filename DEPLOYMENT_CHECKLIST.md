@@ -26,6 +26,16 @@ panduan urutannya.
       real-time (dihitung saat halaman chat dibuka lewat
       `ProactiveService::checkAndDeliver()`), bukan gap.
 - [x] Seluruh test suite hijau (lihat Batch 5 di laporan).
+- [x] Fitur Attachment (Eksekusi) sudah tidak bergantung pada `storage:link`/
+      symlink sama sekali — server rumahweb mematikan `symlink()` sepenuhnya.
+- [x] **(Task 2.9, menggantikan pendekatan disk publik di atas)** Attachment
+      file sekarang ditulis ke disk PRIVAT (`storage/app/private`, disk
+      `local` bawaan Laravel), bukan lagi disk publik apa pun — file cuma
+      bisa diakses lewat route `/attachments/{attachment}/download` yang
+      wajib login DAN cek keanggotaan proyek (sebelumnya siapa pun dengan
+      URL bisa akses langsung, celah keamanan yang ditemukan saat menganalisis
+      solusi symlink). Tidak ada folder publik baru yang perlu disiapkan di
+      server untuk fitur ini.
 
 **Temuan penting yang memengaruhi urutan di bawah:**
 - Aplikasi ini **tidak memakai job queue sama sekali** (`QUEUE_CONNECTION=database`
@@ -162,15 +172,25 @@ lewat Terminal cPanel: `node -v` dan `npm -v`):
       lama tersimpan dari percobaan sebelumnya, supaya migrate benar-benar
       baca `.env` yang baru diisi, bukan cache basi.
 
-## 7. Permission dan symlink
+## 7. Permission storage
 
 - [ ] Pastikan folder `storage/` dan `bootstrap/cache/` writable oleh user
       web server (biasanya `chmod -R 775` sudah cukup di cPanel, sesuaikan
       kalau ada aturan permission khusus dari hosting).
-- [ ] `php artisan storage:link` — **wajib**, fitur Attachment di Eksekusi
-      (upload file ke task) menyimpan file lewat disk `public` dan
-      menyajikannya lewat symlink ini. Tanpa ini, file yang diupload tidak
-      bisa diakses publik (404).
+- [ ] **`php artisan storage:link` TIDAK DIPAKAI LAGI di server ini — jangan
+      dijalankan.** Server rumahweb mematikan fungsi `symlink()` sepenuhnya
+      lewat `disable_functions` (dikonfirmasi via `ini_get('disable_functions')`),
+      jadi command ini akan gagal/tidak berguna. Fitur Attachment di Eksekusi
+      (upload file ke task) sekarang menulis ke disk `local` yang PRIVAT
+      (`storage/app/private`, bawaan Laravel, di luar `public/` sepenuhnya) —
+      file diakses lewat route `/attachments/{attachment}/download` yang cek
+      login + keanggotaan proyek dulu (task 2.9), tidak pernah disajikan
+      langsung sebagai file statis oleh web server. Tidak ada symlink dan
+      tidak ada folder publik baru yang perlu disiapkan untuk fitur ini.
+- [ ] Pastikan folder `storage/app/private` writable oleh user web server
+      (sudah tercakup oleh permission `storage/` di atas). Laravel otomatis
+      membuat subfolder `attachments/` di dalamnya saat upload pertama kali —
+      tidak perlu `mkdir` manual.
 
 ## 8. Document root domain
 
@@ -248,9 +268,11 @@ atas sudah benar dan tidak akan diubah lagi dalam waktu dekat):
       (tidak bisa akses modul milik role lain).
 - [ ] Cek WEBI (`/eksplorasi/webi`) bisa membalas pesan sungguhan (konfirmasi
       `GEMINI_API_KEY` valid dan kuota project tidak habis).
-- [ ] Cek upload attachment di sebuah task (Eksekusi) benar-benar bisa
-      diakses lewat browser setelah diupload (konfirmasi `storage:link`
-      berhasil).
+- [ ] Cek upload attachment di sebuah task (Eksekusi): upload file, klik link
+      attachment-nya, konfirmasi bisa terunduh (disk privat + route
+      `/attachments/{id}/download` jalan benar). Coba juga buka URL download
+      itu dari akun anggota proyek LAIN atau saat logout — harus ditolak
+      (403/redirect login), bukan malah bisa diakses.
 - [ ] Terakhir, pastikan sekali lagi `APP_DEBUG=false` aktif di server —
       caranya paling aman: coba akses URL yang sengaja salah/tidak ada
       (404 harus tampil sebagai halaman generic, bukan stack trace).

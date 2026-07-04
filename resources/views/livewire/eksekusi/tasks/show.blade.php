@@ -101,8 +101,12 @@
                         @if ($attachment->file_type === 'text')
                             <p class="font-medium text-ink">{{ $attachment->file_name }}</p>
                             <p class="mt-1 text-sm text-ink">{{ $attachment->file_url }}</p>
-                        @else
+                        @elseif ($attachment->file_type === 'link')
                             <a href="{{ $attachment->file_url }}" target="_blank" class="font-medium text-ink hover:text-accent">{{ $attachment->file_name }}</a>
+                        @else
+                            {{-- Task 2.9: real uploaded files are never linked directly to a
+                                 public disk URL — always through the access-checked download route. --}}
+                            <a href="{{ url('/attachments/'.$attachment->id.'/download') }}" class="font-medium text-ink hover:text-accent">{{ $attachment->file_name }}</a>
                         @endif
                         <p class="mt-1 text-xs text-muted">{{ $attachment->file_type }} &middot; diupload oleh {{ $attachment->uploader->name }}</p>
                     </div>

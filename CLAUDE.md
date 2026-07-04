@@ -472,10 +472,70 @@ Laravel + Livewire + Alpine.js, MySQL. Detail lengkap: docs/tech-stack.md
   (SSH key gagal → repo public, Composer tidak preinstalled, versi PHP
   mismatch, `proc_open` mati → `--no-scripts` + `package:discover` manual,
   format `.env` tanpa `#` di baris aktif + kutip dua untuk password karakter
-  spesial, `storage:link` wajib untuk fitur attachment, urutan
-  `config:cache`/`route:cache`/`view:cache` PALING TERAKHIR setelah `.env`
-  final, urutan `migrate:fresh --seed` lalu `app:create-admin` terpisah sesuai
-  hasil 2.7). Eksekusi di server tetap manual oleh user.
+  spesial, urutan `config:cache`/`route:cache`/`view:cache` PALING TERAKHIR
+  setelah `.env` final, urutan `migrate:fresh --seed` lalu `app:create-admin`
+  terpisah sesuai hasil 2.7). Eksekusi di server tetap manual oleh user.
+- **RESOLVED (2026-07-04): `storage:link` tidak bisa dipakai sama sekali di
+  server production — `symlink()` dimatikan total lewat `disable_functions`
+  (dikonfirmasi `ini_get('disable_functions')`), bukan cuma error sesaat.**
+  Solusi sementara (copy manual `storage/app/public` ke `public/storage` lewat
+  `cp -r`) sudah jalan tapi tidak scalable (file upload baru tidak otomatis
+  muncul, butuh copy ulang manual tiap kali). **Solusi permanen dipilih:** disk
+  baru `storage_files` (`config/filesystems.php`) dengan root langsung di
+  `public_path('storage_files')` — file attachment ditulis LANGSUNG ke dalam
+  `public/`, disajikan langsung oleh web server, tidak butuh symlink sama
+  sekali selamanya. `App\Services\Execution\TaskService::addAttachmentFile()`
+  diubah menulis ke disk ini (dari disk `public` bawaan Laravel). Dipilih dari
+  3 opsi yang dipertimbangkan (ubah disk vs scheduled-sync vs serve lewat
+  route ber-auth) — alasan utama: tidak ada proses terpisah yang bisa gagal
+  senyap (beda dari opsi scheduled-sync yang bergantung `schedule:run` tiap
+  menit, delay minimal 1 menit, dan kalau cron berhenti jalan, upload baru
+  diam-diam tidak pernah muncul tanpa ada indikasi error). Attachment lama
+  yang sempat di-`cp` manual tetap bisa diakses (foldernya masih ada fisik),
+  tidak butuh migrasi data. `DEPLOYMENT_CHECKLIST.md` diperbarui: langkah
+  `storage:link` dihapus total, diganti catatan eksplisit "jangan dijalankan".
+- **RESOLVED (dikerjakan sebagai task terpisah "2.9: Kontrol Akses Attachment",
+  2026-07-04): attachment task Eksekusi sekarang wajib login + cek keanggotaan
+  proyek.** Lihat section "Known gaps / backlog (dari 2.9)" di bawah untuk
+  detail lengkap.
+
+## Known gaps / backlog (dari 2.9, 2026-07-04)
+- **RESOLVED: attachment file task Eksekusi sebelumnya bisa diakses SIAPA PUN
+  yang punya URL-nya, tanpa cek login atau keanggotaan proyek sama sekali.**
+  Ditemukan saat menganalisis solusi symlink di 2.8 (opsi serve-lewat-route
+  yang saat itu sengaja tidak dipilih) — karakteristik yang sudah ada sejak
+  2.4, bukan regresi dari perubahan disk `storage_files` di 2.8. Diperbaiki
+  penuh:
+  - File attachment sekarang ditulis ke disk `local` (privat, `storage/app/private`,
+    tidak pernah bisa diakses langsung lewat URL web) alih-alih disk
+    `storage_files` yang disajikan publik apa adanya. `TaskService::addAttachmentFile()`
+    diubah; `file_url` untuk tipe file sekarang menyimpan PATH RELATIF di disk,
+    bukan URL yang bisa diakses langsung.
+  - Route baru `/attachments/{attachment}/download` (`App\Http\Controllers\Eksekusi\AttachmentDownloadController`,
+    middleware `auth` + `role:execution_member,admin`) — cek akses PERSIS
+    sama seperti `Tasks\Show::mount()` (admin, atau anggota proyek yang sama
+    dengan task tempat attachment itu berada), lalu stream file lewat
+    `Storage::disk(...)->download()`. Gagal cek akses → 403 (bukan 404, sesuai
+    instruksi user — 403 lebih jujur secara keamanan tapi tanpa membocorkan
+    detail alasan penolakan di pesannya). Attachment tipe `link`/`text` (bukan
+    file sungguhan) sengaja 404 di route ini — `file_url`-nya bukan path disk.
+  - `tasks/show.blade.php` diperbarui: link attachment tipe file sekarang
+    mengarah ke route download ini, bukan lagi langsung ke `file_url`. Tipe
+    `link` (URL eksternal yang di-paste user) TETAP tampil sebagai link
+    langsung apa adanya — itu bukan file yang kita simpan, tidak relevan
+    untuk dilewatkan lewat cek akses ini.
+  - **Attachment lama dari disk `storage_files` (jendela singkat 2.8→2.9):**
+    dicek live, 0 baris ada di database manapun yang saya akses. Dipilih
+    pendekatan FALLBACK di `AttachmentDownloadController` (bukan migrasi data
+    terpisah) — kalau `file_url` masih berbentuk URL lama yang mengandung
+    `/storage_files/`, controller otomatis baca dari disk `storage_files`
+    alih-alih `local`. Alasan pilih fallback dibanding migrasi: cuma beberapa
+    baris kode, tidak perlu command/test terpisah untuk memigrasi data yang
+    saat ini kosong, dan tetap benar kalau ternyata ada baris yang terlewat
+    di lingkungan lain.
+  - Disk `storage_files` (`config/filesystems.php`) TIDAK dihapus — masih
+    perlu ada untuk fallback di atas, cuma tidak lagi ditulisi upload baru.
+    Dikomentari eksplisit sebagai "LEGACY — no longer written to."
 
 ## Progress Fase 2
 - [x] 2.0 Fondasi Database (migration + model untuk SELURUH entitas)
@@ -490,3 +550,4 @@ Laravel + Livewire + Alpine.js, MySQL. Detail lengkap: docs/tech-stack.md
 - [ ] 2.8 Deployment Live — persiapan kode selesai (`.env.example`, build asset,
       scheduler, `DEPLOYMENT_CHECKLIST.md`); eksekusi manual di server oleh
       user masih berjalan
+- [x] 2.9 Kontrol Akses Attachment
