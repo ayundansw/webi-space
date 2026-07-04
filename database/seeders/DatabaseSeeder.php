@@ -2,10 +2,18 @@
 
 namespace Database\Seeders;
 
-use App\Models\User;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
+/**
+ * Task 2.7: production/dev seeding entrypoint (`php artisan migrate:fresh --seed`).
+ * Seeds ONLY the real curriculum content — no sample/dummy data, no users of
+ * any kind. `ExplorationSampleSeeder` stays test-only (called explicitly via
+ * `$this->seed(ExplorationSampleSeeder::class)` in test setUp() methods, never
+ * from here). The first admin account is created afterward via the
+ * interactive `php artisan app:create-admin` command — never hardcoded here,
+ * per the no-hardcoded-credentials rule from task 2.1 (public repo).
+ */
 class DatabaseSeeder extends Seeder
 {
     use WithoutModelEvents;
@@ -15,11 +23,6 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // User::factory(10)->create();
-
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
-        ]);
+        $this->call(CurriculumSeeder::class);
     }
 }
