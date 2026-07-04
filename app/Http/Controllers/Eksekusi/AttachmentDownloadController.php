@@ -44,7 +44,10 @@ class AttachmentDownloadController extends Controller
 
     /**
      * New uploads (post task 2.9) store a relative path on the private
-     * `local` disk in `file_url`. Attachments uploaded during the brief
+     * `attachments` disk in `file_url` (its own disk — never `local`, which
+     * Livewire's temporary file upload mechanism also defaults to; see
+     * config/filesystems.php's 'attachments' disk comment for the production
+     * incident that taught this). Attachments uploaded during the brief
      * window between task 2.8 (storage_files, public) and this task stored a
      * full URL under `storage_files` instead — none exist as of 2.9 (checked
      * live), but this fallback keeps them working if any ever surface,
@@ -56,6 +59,6 @@ class AttachmentDownloadController extends Controller
             return ['storage_files', Str::after($attachment->file_url, '/storage_files/')];
         }
 
-        return ['local', $attachment->file_url];
+        return ['attachments', $attachment->file_url];
     }
 }

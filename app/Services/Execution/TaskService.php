@@ -289,13 +289,18 @@ class TaskService
 
     public function addAttachmentFile(Task $task, User $uploader, UploadedFile $file): Attachment
     {
-        // Task 2.9: files write to the private 'local' disk (storage/app/private,
-        // never web-accessible directly) instead of the 'storage_files' disk
-        // used briefly in task 2.8. `file_url` now holds a relative disk path,
-        // not a resolvable public URL — access is only ever through
+        // Task 2.9: files write to the private 'attachments' disk
+        // (storage/app/private, never web-accessible directly) instead of the
+        // 'storage_files' disk used briefly in task 2.8. This is its OWN disk,
+        // never the shared 'local' disk — Livewire's temporary file upload
+        // mechanism also defaults to 'local', and an earlier version of this
+        // fix that repointed 'local' itself broke every file upload in the
+        // app in production. See config/filesystems.php's 'attachments' disk
+        // comment. `file_url` now holds a relative disk path, not a
+        // resolvable public URL — access is only ever through
         // AttachmentDownloadController (auth + project-membership checked,
         // same rule as Tasks\Show::mount()), never a raw static file request.
-        $path = $file->store('attachments', 'local');
+        $path = $file->store('attachments', 'attachments');
 
         $attachment = Attachment::create([
             'task_id' => $task->id,

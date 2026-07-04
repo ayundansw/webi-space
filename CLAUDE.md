@@ -506,11 +506,12 @@ Laravel + Livewire + Alpine.js, MySQL. Detail lengkap: docs/tech-stack.md
   yang saat itu sengaja tidak dipilih) — karakteristik yang sudah ada sejak
   2.4, bukan regresi dari perubahan disk `storage_files` di 2.8. Diperbaiki
   penuh:
-  - File attachment sekarang ditulis ke disk `local` (privat, `storage/app/private`,
-    tidak pernah bisa diakses langsung lewat URL web) alih-alih disk
-    `storage_files` yang disajikan publik apa adanya. `TaskService::addAttachmentFile()`
-    diubah; `file_url` untuk tipe file sekarang menyimpan PATH RELATIF di disk,
-    bukan URL yang bisa diakses langsung.
+  - File attachment sekarang ditulis ke disk `attachments` (privat, disk BARU
+    khusus, `storage/app/private`, tidak pernah bisa diakses langsung lewat
+    URL web) alih-alih disk `storage_files` yang disajikan publik apa
+    adanya. `TaskService::addAttachmentFile()` diubah; `file_url` untuk tipe
+    file sekarang menyimpan PATH RELATIF di disk, bukan URL yang bisa
+    diakses langsung.
   - Route baru `/attachments/{attachment}/download` (`App\Http\Controllers\Eksekusi\AttachmentDownloadController`,
     middleware `auth` + `role:execution_member,admin`) — cek akses PERSIS
     sama seperti `Tasks\Show::mount()` (admin, atau anggota proyek yang sama
@@ -529,13 +530,35 @@ Laravel + Livewire + Alpine.js, MySQL. Detail lengkap: docs/tech-stack.md
     pendekatan FALLBACK di `AttachmentDownloadController` (bukan migrasi data
     terpisah) — kalau `file_url` masih berbentuk URL lama yang mengandung
     `/storage_files/`, controller otomatis baca dari disk `storage_files`
-    alih-alih `local`. Alasan pilih fallback dibanding migrasi: cuma beberapa
-    baris kode, tidak perlu command/test terpisah untuk memigrasi data yang
-    saat ini kosong, dan tetap benar kalau ternyata ada baris yang terlewat
-    di lingkungan lain.
+    alih-alih `attachments`. Alasan pilih fallback dibanding migrasi: cuma
+    beberapa baris kode, tidak perlu command/test terpisah untuk memigrasi
+    data yang saat ini kosong, dan tetap benar kalau ternyata ada baris yang
+    terlewat di lingkungan lain.
   - Disk `storage_files` (`config/filesystems.php`) TIDAK dihapus — masih
     perlu ada untuk fallback di atas, cuma tidak lagi ditulisi upload baru.
     Dikomentari eksplisit sebagai "LEGACY — no longer written to."
+- **BUG PRODUKSI ditemukan dan diperbaiki di hari yang sama (2026-07-04):
+  percobaan pertama perbaikan di atas salah menimpa disk `local` BAWAAN
+  Laravel (bukan bikin disk baru), bikin SELURUH upload file lewat Livewire
+  di aplikasi ini gagal di production dengan error "Unable to retrieve the
+  file_size" — bukan cuma soal attachment Eksekusi.** Akar masalah: Livewire
+  sendiri memakai disk default aplikasi (`config/livewire.php`
+  `temporary_file_upload.disk`, kalau kosong jatuh ke `filesystems.default`,
+  yaitu disk `local`) untuk SEMUA upload sementara di halaman manapun,
+  sebelum file itu dipindah permanen oleh kode aplikasi. Analisis awal
+  "blast radius sempit, cuma TaskService yang pakai" tidak menghitung
+  dependency tersembunyi Livewire ke disk `local` sebagai disk default.
+  **Diperbaiki:** disk `local` dikembalikan PERSIS ke kondisi bawaan
+  (`storage_path('app')`, tidak disentuh sama sekali, komentar 2.9 yang
+  sempat ditambahkan di situ juga dihapus). Attachment sekarang pakai disk
+  BARU bernama `attachments` (root `storage_path('app/private')`, terpisah
+  total dari `local`). **Pelajaran yang dicatat eksplisit di kode
+  (`config/filesystems.php`):** jangan pernah menimpa/merepurpose disk yang
+  mungkin dipakai Livewire atau infrastruktur framework lain untuk kebutuhan
+  satu fitur spesifik — selalu buat disk baru dengan nama sendiri. Test
+  regresi ditambahkan yang secara eksplisit TIDAK fake disk `attachments`
+  saat menguji langkah upload sementara Livewire, membuktikan langkah itu
+  tidak lagi bergantung pada disk `attachments` sama sekali.
 
 ## Progress Fase 2
 - [x] 2.0 Fondasi Database (migration + model untuk SELURUH entitas)

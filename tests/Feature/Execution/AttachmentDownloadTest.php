@@ -28,7 +28,7 @@ class AttachmentDownloadTest extends TestCase
 
         // Fake both disks so these tests never touch real files on
         // storage/app/private or public/storage_files.
-        Storage::fake('local');
+        Storage::fake('attachments');
         Storage::fake('storage_files');
     }
 
@@ -73,7 +73,7 @@ class AttachmentDownloadTest extends TestCase
 
     private function fileAttachment(Task $task, User $uploader, string $relativePath = 'attachments/report.pdf'): Attachment
     {
-        Storage::disk('local')->put($relativePath, 'isi file rahasia proyek');
+        Storage::disk('attachments')->put($relativePath, 'isi file rahasia proyek');
 
         return Attachment::create([
             'task_id' => $task->id, 'uploaded_by' => $uploader->id,
@@ -204,5 +204,24 @@ class AttachmentDownloadTest extends TestCase
         ]);
 
         $this->actingAs($member)->get("/attachments/{$attachment->id}/download")->assertNotFound();
+    }
+
+    /**
+     * Production incident regression (2026-07-04): the first version of this
+     * fix repointed the shared 'local' disk instead of adding a new
+     * 'attachments' disk, which broke Livewire's temporary file upload
+     * mechanism app-wide (it also defaults to 'local') — "Unable to retrieve
+     * the file_size" on every upload, not just attachments. This asserts the
+     * two disks are configured separately and 'local' is back to its
+     * untouched default.
+     */
+    public function test_local_disk_is_untouched_and_kept_separate_from_the_attachments_disk(): void
+    {
+        $this->assertSame(storage_path('app'), config('filesystems.disks.local.root'));
+        $this->assertSame(storage_path('app/private'), config('filesystems.disks.attachments.root'));
+        $this->assertNotSame(
+            config('filesystems.disks.local.root'),
+            config('filesystems.disks.attachments.root'),
+        );
     }
 }

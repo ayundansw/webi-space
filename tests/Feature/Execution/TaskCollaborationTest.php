@@ -129,11 +129,14 @@ class TaskCollaborationTest extends TestCase
 
     public function test_member_can_upload_file_attachment_via_real_form(): void
     {
-        // Task 2.9: files now write to the private 'local' disk, never a
-        // publicly-servable one — access is only ever through
-        // AttachmentDownloadController (see AttachmentDownloadTest.php),
-        // not a direct URL.
-        Storage::fake('local');
+        // Task 2.9: files write to the private 'attachments' disk — its own
+        // disk, deliberately NOT 'local' (Livewire's temporary file upload
+        // mechanism also defaults to 'local'; an earlier version of this fix
+        // repointed 'local' itself and broke every Livewire upload in the
+        // app in production). Access is only ever through
+        // AttachmentDownloadController (see AttachmentDownloadTest.php), not
+        // a direct URL.
+        Storage::fake('attachments');
 
         $admin = $this->admin();
         $member = $this->executionMember('Ahmad');
@@ -152,7 +155,7 @@ class TaskCollaborationTest extends TestCase
         $this->assertSame('progres.png', $attachment->file_name);
         $this->assertNotSame('link', $attachment->file_type);
         $this->assertNotNull($attachment->file_size);
-        Storage::disk('local')->assertExists($attachment->file_url);
+        Storage::disk('attachments')->assertExists($attachment->file_url);
 
         // file_url is a relative disk path now, never a resolvable public URL.
         $this->assertStringNotContainsString('http', $attachment->file_url);
@@ -164,7 +167,7 @@ class TaskCollaborationTest extends TestCase
 
     public function test_uploaded_attachment_is_only_reachable_through_the_access_checked_download_route(): void
     {
-        Storage::fake('local');
+        Storage::fake('attachments');
 
         $admin = $this->admin();
         $member = $this->executionMember('Ahmad');
@@ -185,6 +188,37 @@ class TaskCollaborationTest extends TestCase
 
         $outsider = $this->executionMember('Bilal');
         $this->actingAs($outsider)->get('/attachments/'.$attachment->id.'/download')->assertForbidden();
+    }
+
+    /**
+     * Production incident regression (2026-07-04): the first version of the
+     * task 2.9 fix repointed the shared 'local' disk (instead of adding a
+     * dedicated 'attachments' disk) for attachment storage. Since Livewire's
+     * own temporary file upload mechanism ALSO defaults to 'local'
+     * (config/livewire.php temporary_file_upload.disk unset -> filesystems.default),
+     * that coupling broke every Livewire file upload in the app —
+     * "Unable to retrieve the file_size" — not just the attachment feature.
+     * This test fakes ONLY 'local' (Livewire's disk) and deliberately leaves
+     * 'attachments' disk untouched, proving Livewire's temporary-upload step
+     * (`->set()` on a file property — exactly where that error occurred)
+     * works independent of whatever state the attachments disk is in.
+     */
+    public function test_livewire_temporary_file_upload_step_is_independent_of_the_attachments_disk(): void
+    {
+        Storage::fake('local');
+
+        $admin = $this->admin();
+        $member = $this->executionMember('Ahmad');
+        $task = $this->taskWithProject($admin);
+        ProjectMember::create(['project_id' => $task->project_id, 'user_id' => $member->id]);
+
+        $component = Livewire::actingAs($member)->test(Show::class, ['task' => $task])
+            ->set('attachmentMode', 'file')
+            ->set('attachmentFile', UploadedFile::fake()->image('bukti.png', 400, 300));
+
+        $uploaded = $component->get('attachmentFile');
+        $this->assertNotNull($uploaded);
+        $this->assertGreaterThan(0, $uploaded->getSize());
     }
 
     public function test_member_can_add_link_attachment_via_real_form(): void

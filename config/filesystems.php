@@ -30,16 +30,9 @@ return [
 
     'disks' => [
 
-        /*
-         * Task 2.9: task attachment files (App\Services\Execution\TaskService::addAttachmentFile())
-         * write here — never web-accessible directly. Served only through
-         * App\Http\Controllers\Eksekusi\AttachmentDownloadController, which
-         * checks auth + project membership before streaming (same rule as
-         * App\Livewire\Eksekusi\Tasks\Show::mount()).
-         */
         'local' => [
             'driver' => 'local',
-            'root' => storage_path('app/private'),
+            'root' => storage_path('app'),
             'serve' => true,
             'throw' => false,
             'report' => false,
@@ -50,6 +43,32 @@ return [
             'root' => storage_path('app/public'),
             'url' => rtrim(env('APP_URL', 'http://localhost'), '/').'/storage',
             'visibility' => 'public',
+            'throw' => false,
+            'report' => false,
+        ],
+
+        /*
+         * Task 2.9, corrected (2026-07-04 production incident): task
+         * attachment files (App\Services\Execution\TaskService::addAttachmentFile())
+         * write here — never web-accessible directly. Served only through
+         * App\Http\Controllers\Eksekusi\AttachmentDownloadController, which
+         * checks auth + project membership before streaming (same rule as
+         * App\Livewire\Eksekusi\Tasks\Show::mount()).
+         *
+         * Deliberately its OWN disk, not the 'local' disk above — Livewire's
+         * temporary file upload mechanism also defaults to the app's default
+         * disk (config/livewire.php temporary_file_upload.disk, unset →
+         * filesystems.default → 'local'). The first version of this fix
+         * repointed the shared 'local' disk instead of adding a new one,
+         * which broke EVERY Livewire file upload in the app in production
+         * ("Unable to retrieve the file_size") because Livewire's temp
+         * uploads got coupled to this disk too. Never repurpose 'local' (or
+         * any disk Livewire might touch) for a single feature's storage —
+         * always give app-specific storage needs their own named disk.
+         */
+        'attachments' => [
+            'driver' => 'local',
+            'root' => storage_path('app/private'),
             'throw' => false,
             'report' => false,
         ],

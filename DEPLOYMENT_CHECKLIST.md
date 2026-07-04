@@ -29,9 +29,14 @@ panduan urutannya.
 - [x] Fitur Attachment (Eksekusi) sudah tidak bergantung pada `storage:link`/
       symlink sama sekali — server rumahweb mematikan `symlink()` sepenuhnya.
 - [x] **(Task 2.9, menggantikan pendekatan disk publik di atas)** Attachment
-      file sekarang ditulis ke disk PRIVAT (`storage/app/private`, disk
-      `local` bawaan Laravel), bukan lagi disk publik apa pun — file cuma
-      bisa diakses lewat route `/attachments/{attachment}/download` yang
+      file sekarang ditulis ke disk PRIVAT baru bernama `attachments`
+      (`storage/app/private`) — **BUKAN disk `local` bawaan Laravel**. Sempat
+      salah pakai disk `local` di percobaan pertama dan itu bikin SELURUH
+      upload file lewat Livewire di aplikasi ini gagal di production (Livewire
+      juga pakai disk `local` sebagai disk default-nya sendiri) — sudah
+      diperbaiki dengan disk terpisah, `local` dikembalikan ke kondisi
+      bawaan (`storage/app`), tidak disentuh sama sekali. File attachment
+      cuma bisa diakses lewat route `/attachments/{attachment}/download` yang
       wajib login DAN cek keanggotaan proyek (sebelumnya siapa pun dengan
       URL bisa akses langsung, celah keamanan yang ditemukan saat menganalisis
       solusi symlink). Tidak ada folder publik baru yang perlu disiapkan di
@@ -181,12 +186,16 @@ lewat Terminal cPanel: `node -v` dan `npm -v`):
       dijalankan.** Server rumahweb mematikan fungsi `symlink()` sepenuhnya
       lewat `disable_functions` (dikonfirmasi via `ini_get('disable_functions')`),
       jadi command ini akan gagal/tidak berguna. Fitur Attachment di Eksekusi
-      (upload file ke task) sekarang menulis ke disk `local` yang PRIVAT
-      (`storage/app/private`, bawaan Laravel, di luar `public/` sepenuhnya) —
-      file diakses lewat route `/attachments/{attachment}/download` yang cek
-      login + keanggotaan proyek dulu (task 2.9), tidak pernah disajikan
-      langsung sebagai file statis oleh web server. Tidak ada symlink dan
-      tidak ada folder publik baru yang perlu disiapkan untuk fitur ini.
+      (upload file ke task) sekarang menulis ke disk `attachments` (baru,
+      privat, root `storage/app/private`, terdaftar terpisah di
+      `config/filesystems.php`) — **BUKAN disk `local` bawaan Laravel**,
+      supaya tidak bentrok dengan Livewire yang juga pakai disk `local`
+      sebagai disk default-nya sendiri untuk upload sementara di halaman
+      manapun. File attachment diakses lewat route
+      `/attachments/{attachment}/download` yang cek login + keanggotaan
+      proyek dulu (task 2.9), tidak pernah disajikan langsung sebagai file
+      statis oleh web server. Tidak ada symlink dan tidak ada folder publik
+      baru yang perlu disiapkan untuk fitur ini.
 - [ ] Pastikan folder `storage/app/private` writable oleh user web server
       (sudah tercakup oleh permission `storage/` di atas). Laravel otomatis
       membuat subfolder `attachments/` di dalamnya saat upload pertama kali —
@@ -273,6 +282,15 @@ atas sudah benar dan tidak akan diubah lagi dalam waktu dekat):
       `/attachments/{id}/download` jalan benar). Coba juga buka URL download
       itu dari akun anggota proyek LAIN atau saat logout — harus ditolak
       (403/redirect login), bukan malah bisa diakses.
+- [ ] **Wajib khusus setelah insiden production 2026-07-04:** upload file
+      attachment di task Eksekusi HARUS berhasil tanpa error "Unable to
+      retrieve the file_size" — error ini pernah muncul di production karena
+      percobaan perbaikan pertama menimpa disk `local` bawaan Laravel (yang
+      juga dipakai Livewire untuk upload sementara di halaman manapun),
+      bukan cuma masalah attachment. Kalau error ini muncul lagi di server,
+      cek `config/filesystems.php` — disk `local` HARUS tetap
+      `storage_path('app')`, jangan pernah diubah untuk kebutuhan fitur
+      tertentu, selalu buat disk baru dengan nama sendiri.
 - [ ] Terakhir, pastikan sekali lagi `APP_DEBUG=false` aktif di server —
       caranya paling aman: coba akses URL yang sengaja salah/tidak ada
       (404 harus tampil sebagai halaman generic, bukan stack trace).
