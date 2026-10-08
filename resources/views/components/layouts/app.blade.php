@@ -8,49 +8,45 @@
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     @livewireStyles
 </head>
-<body class="min-h-screen bg-white text-ink font-sans antialiased">
-    <header class="border-b border-muted/25">
-        <div class="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-y-3 px-6 py-4">
-            <a href="{{ url('/dashboard') }}" class="font-display text-lg font-bold text-ink">WEBI-SPACE</a>
+<body
+    class="flex min-h-screen flex-col bg-white text-ink font-sans antialiased"
+    x-data="{ popupOpen: false }"
+    x-init="document.addEventListener('livewire:navigated', () => { popupOpen = false })"
+>
+    {{--
+        Bagian A (perbaikan lanjutan): @persist('shell-navbar') DIHAPUS.
+        Navbar berisi <x-shell.nav-popup> yang ring aktifnya dihitung
+        SERVER-SIDE per request (App\Support\NavigationMatcher, dari route
+        saat ini) -- sama persis alasan breadcrumb di bawah SENGAJA tidak
+        di-@persist (lihat komentarnya). @persist membekukan markup-nya di
+        render pertama; setelah itu wire:navigate cuma menukar {{ $slot }},
+        navbar (dan ring aktifnya) tidak pernah dihitung ulang -- persis bug
+        yang dilaporkan Aye (pindah ke Dashboard, ring masih di Forum).
+        Konsekuensi: <header> sekarang anak langsung <body> tanpa wrapper
+        <div x-persist> sama sekali, jadi bug sticky yang dulu di-fix pakai
+        `display: contents` (lihat app.css) juga otomatis tidak terjadi lagi
+        -- aturan CSS itu ikut dihapus karena tidak ada elemen x-persist
+        lagi yang perlu ditarget.
+    --}}
+    <x-shell.navbar />
 
-            @auth
-                <nav class="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-                    <span class="text-muted">{{ auth()->user()->name }}</span>
+    {{--
+        Breadcrumb lives INSIDE <main> now (card mengambang kanan-atas,
+        bukan baris tersendiri) -- `relative` di <main> di bawah ini adalah
+        containing block-nya. Deliberately NOT wrapped in @persist (same
+        reasoning as the old sidebar's active-route highlight): it's
+        server-computed PHP based on the current route
+        (App\Support\Breadcrumbs::trail()), so persisting the DOM would
+        freeze it at whatever page first rendered it. Self-guards to
+        rendering nothing for guests/routes with no trail
+        (Breadcrumbs::trail() returns []), so no @auth wrapper needed here.
+    --}}
+    <main class="relative mx-auto w-full max-w-7xl flex-1 px-6 py-10">
+        <x-shell.breadcrumb />
 
-                    @if (auth()->user()->role === 'admin')
-                        <a href="{{ url('/admin/dashboard') }}" class="text-ink hover:text-accent">Dashboard</a>
-                        <a href="{{ url('/admin/users') }}" class="text-ink hover:text-accent">Manajemen Akun</a>
-                        <a href="{{ url('/eksekusi/ideas') }}" class="text-ink hover:text-accent">Project Ideas</a>
-                        <a href="{{ url('/eksekusi/projects') }}" class="text-ink hover:text-accent">Proyek</a>
-                        <a href="{{ url('/admin/webi') }}" class="text-ink hover:text-accent">Log WEBI</a>
-                    @elseif (auth()->user()->role === 'exploration_member')
-                        <a href="{{ url('/eksplorasi/dashboard') }}" class="text-ink hover:text-accent">Dashboard</a>
-                        <a href="{{ url('/eksplorasi/kurikulum') }}" class="text-ink hover:text-accent">Peta Kurikulum</a>
-                        <a href="{{ url('/eksplorasi/resources') }}" class="text-ink hover:text-accent">Referensi</a>
-                        <a href="{{ url('/eksplorasi/forum') }}" class="text-ink hover:text-accent">Forum</a>
-                        <a href="{{ url('/eksplorasi/webi') }}" class="text-ink hover:text-accent">WEBI</a>
-                    @elseif (auth()->user()->role === 'execution_member')
-                        <a href="{{ url('/eksekusi/dashboard') }}" class="text-ink hover:text-accent">Dashboard</a>
-                        <a href="{{ url('/eksekusi/ideas') }}" class="text-ink hover:text-accent">Project Ideas</a>
-                        <a href="{{ url('/eksekusi/projects') }}" class="text-ink hover:text-accent">Proyek</a>
-                    @endif
-
-                    <livewire:notifications.bell />
-
-                    <form method="POST" action="{{ url('/logout') }}">
-                        @csrf
-                        <button type="submit" class="rounded-lg border border-muted/40 px-3 py-1.5 text-ink hover:border-ink">
-                            Keluar
-                        </button>
-                    </form>
-                </nav>
-            @endauth
-        </div>
-    </header>
-
-    <main class="mx-auto max-w-5xl px-6 py-10">
         {{ $slot }}
     </main>
+
     @livewireScripts
 </body>
 </html>

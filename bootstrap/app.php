@@ -1,6 +1,8 @@
 <?php
 
+use App\Http\Middleware\EnsureCanAccessMode;
 use App\Http\Middleware\EnsureMembershipIsActive;
+use App\Http\Middleware\EnsureProjectMembership;
 use App\Http\Middleware\EnsureUserHasRole;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -16,6 +18,12 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
             'role' => EnsureUserHasRole::class,
+            'project.member' => EnsureProjectMembership::class,
+            // Fase 8 Batch 2: replaces `role:execution_member[,admin]` on
+            // Eksekusi routes specifically — see routes/web.php for which
+            // declarations were swapped. `role:` itself is untouched and
+            // still used everywhere else (Eksplorasi, admin panels).
+            'mode' => EnsureCanAccessMode::class,
         ]);
 
         $middleware->appendToGroup('web', EnsureMembershipIsActive::class);

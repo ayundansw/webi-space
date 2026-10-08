@@ -18,6 +18,9 @@ export default defineConfig({
                 bunny('JetBrains Mono', {
                     weights: [400, 500],
                 }),
+                bunny('Silkscreen', {
+                    weights: [400, 700],
+                }),
             ],
         }),
         tailwindcss(),

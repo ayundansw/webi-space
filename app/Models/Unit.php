@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 
 #[Fillable([
     'module_id', 'order_number', 'title', 'content', 'estimated_minutes',
@@ -54,5 +55,17 @@ class Unit extends Model
     public function messages(): HasMany
     {
         return $this->hasMany(Message::class, 'unit_context');
+    }
+
+    /**
+     * 2.2.4a (Konten Dinamis, batch fondasi): additive only — `content`
+     * (plain text) above is untouched and still the source unit-show reads
+     * from until each unit is migrated by hand (docs/v_2.0/RECON_konten_dinamis.md
+     * §G17). This relation exists so the renderer/tests can be built now
+     * without waiting for that migration.
+     */
+    public function contentBlocks(): MorphMany
+    {
+        return $this->morphMany(ContentBlock::class, 'blockable')->orderBy('order');
     }
 }

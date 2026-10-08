@@ -5,6 +5,7 @@ namespace Tests\Feature\Auth;
 use App\Livewire\Auth\Login;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Hash;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -101,5 +102,42 @@ class LoginTest extends TestCase
             ->assertHasErrors('email');
 
         $this->assertGuest();
+    }
+
+    /**
+     * Pre-deploy audit finding: rehash-on-login writes to the column named by
+     * getAuthPasswordName(). Without that override it targeted a "password"
+     * column that doesn't exist, so a BCRYPT_ROUNDS mismatch between seeding
+     * and the server made login throw instead of succeed.
+     */
+    public function test_login_rehashes_into_password_hash_when_bcrypt_rounds_changed(): void
+    {
+        $oldHash = Hash::make('secret123', ['rounds' => 4]);
+
+        $user = User::create([
+            'name' => 'Rehash',
+            'email' => 'rehash@example.test',
+            'password_hash' => $oldHash,
+            'role' => 'exploration_member',
+            'membership_status' => 'active',
+        ]);
+
+        config(['hashing.bcrypt.rounds' => 12]);
+        Hash::driver('bcrypt')->setRounds(12);
+
+        Livewire::test(Login::class)
+            ->set('email', 'rehash@example.test')
+            ->set('password', 'secret123')
+            ->call('login')
+            ->assertHasNoErrors()
+            ->assertRedirect('/eksplorasi/dashboard');
+
+        $this->assertAuthenticatedAs($user);
+
+        $newHash = $user->fresh()->password_hash;
+
+        $this->assertNotSame($oldHash, $newHash);
+        $this->assertTrue(Hash::check('secret123', $newHash));
+        $this->assertSame(12, Hash::info($newHash)['options']['cost']);
     }
 }

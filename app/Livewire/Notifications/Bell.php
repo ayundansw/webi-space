@@ -12,7 +12,7 @@ use Livewire\Component;
  * all three roles (each only ever sees their own `recipient_id` rows — the
  * `Notification` data itself has been correct since 2.6, this is purely the
  * missing UI surface). No websocket/broadcast infrastructure exists in this
- * stack (docs/tech-stack.md never sets one up), so "near real-time" is done
+ * stack (docs/v_2.0/archive/sumber-konsolidasi/tech-stack.md never sets one up), so "near real-time" is done
  * via a cheap `wire:poll`, not a new dependency.
  */
 class Bell extends Component

@@ -4,6 +4,8 @@ namespace Tests\Feature\Notifications;
 
 use App\Livewire\Notifications\Bell;
 use App\Livewire\Notifications\Index;
+use App\Models\Challenge;
+use App\Models\ChallengeSubmission;
 use App\Models\Module;
 use App\Models\Notification;
 use App\Models\Task;
@@ -142,5 +144,47 @@ class NotificationScopingAndSafetyTest extends TestCase
         $this->assertNull($notification->linkUrl());
 
         Livewire::actingAs($member)->test(Bell::class)->assertOk();
+    }
+
+    /**
+     * Tahap B QA (2026-07-17): linkUrl() had no match arm for
+     * 'challenge_submission' at all, so all 4 submission-lifecycle
+     * notification types silently rendered with no link. Recipient-dependent:
+     * the admin/reviewer-facing types go to the review page (which 403s an
+     * exploration_member submitter), so the submitter-facing types must land
+     * on their own challenge page instead.
+     */
+    public function test_challenge_submission_notifications_link_to_the_right_page_for_their_recipient(): void
+    {
+        $admin = $this->admin();
+        $member = $this->member('Elang');
+
+        $challenge = Challenge::create([
+            'title' => 'Challenge Uji', 'description' => 'D', 'level' => 'low',
+            'points_reward' => 50, 'status' => 'published',
+        ]);
+        $submission = ChallengeSubmission::create([
+            'challenge_id' => $challenge->id, 'user_id' => $member->id,
+            'submission_type' => 'text', 'content' => 'x', 'status' => 'pending', 'attempt_number' => 1,
+        ]);
+
+        $reviewUrl = url('/eksekusi/praktik/submissions/'.$submission->id);
+        $challengeUrl = url('/eksplorasi/praktik/'.$challenge->id);
+
+        foreach (['submission_received_alert', 'submission_assigned_to_reviewer'] as $type) {
+            $notification = Notification::create([
+                'recipient_id' => $admin->id, 'context_type' => 'challenge_submission', 'context_id' => $submission->id,
+                'type' => $type, 'title' => 'x', 'message' => 'x', 'is_read' => false,
+            ]);
+            $this->assertSame($reviewUrl, $notification->linkUrl(), "type={$type} should link to the review page.");
+        }
+
+        foreach (['submission_approved', 'submission_needs_revision'] as $type) {
+            $notification = Notification::create([
+                'recipient_id' => $member->id, 'context_type' => 'challenge_submission', 'context_id' => $submission->id,
+                'type' => $type, 'title' => 'x', 'message' => 'x', 'is_read' => false,
+            ]);
+            $this->assertSame($challengeUrl, $notification->linkUrl(), "type={$type} should link to the submitter's own challenge page, not the review page.");
+        }
     }
 }

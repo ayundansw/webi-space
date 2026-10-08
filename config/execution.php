@@ -8,7 +8,7 @@ return [
     |--------------------------------------------------------------------------
     |
     | Configurable thresholds for the automatic monitoring flags defined in
-    | docs/struktur-eksekusi.md Bagian 5.2, with defaults from docs/PRD.md's
+    | docs/v_2.0/archive/sumber-konsolidasi/struktur-eksekusi.md Bagian 5.2, with defaults from docs/v_2.0/archive/sumber-konsolidasi/PRD.md's
     | "Parameter Eksekusi" table.
     |
     */

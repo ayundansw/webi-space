@@ -8,9 +8,256 @@
         'Segoe UI Symbol', 'Noto Color Emoji';
     --font-display: 'Sora', ui-sans-serif, system-ui, sans-serif;
     --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    --font-pixel: 'Silkscreen', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
     --color-ink: #1C1515;
     --color-muted: #979393;
     --color-accent: #05D9E7;
     --color-accent-soft: #D1F8FF;
+
+    /*
+     * Design token v2 (docs/v_2.0/archive/sumber-konsolidasi/design-tokens-v2.md) — additive only, nothing
+     * above this line changes. Not yet applied anywhere except the
+     * Eksplorasi dashboard + <x-stat-card>'s opt-in props, so every other
+     * page stays visually identical until it's deliberately migrated.
+     */
+    --color-warm: #FF7F50;
+    --color-warm-soft: #FFE8DD;
+    --color-warm-mid: #FFB496;
+    --color-surface: #FAF8F6;
+    --color-surface-alt: #F3F0EC;
+
+    /*
+     * Fase 2 Langkah 4 (Avatar Fox + Hewan Eksekusi) — 4 warna badan baru,
+     * dipakai lewat <x-avatar.fox>/<x-avatar.eksekusi>. Ditambahkan HANYA
+     * untuk keluarga warna yang tidak ada padanan wajar di token yang sudah
+     * ada (Harimau reuse --color-warm, Cheetah reuse --color-warm-mid, Singa
+     * (badan) reuse --color-warning -- lihat komponennya).
+     */
+    --color-fox: #C9793C;
+    --color-eagle: #5B4230;
+    --color-wolf: #7C8792;
+    --color-lion-mane: #A9702E;
+
+    --color-success: #2FA872;
+    --color-success-soft: #E4F5EC;
+    --color-warning: #E8A23C;
+    --color-warning-soft: #FCF0DC;
+    --color-danger: #E1594B;
+    --color-danger-soft: #FBEAE7;
+
+    /*
+     * Fase 2 Langkah 1 (2026-07-10) — finalisasi, ditambahkan ke v2 di atas.
+     * Info/netral pakai --color-accent-soft / --color-muted yang sudah ada
+     * (tidak butuh token baru). Aktif/berjalan pakai --color-accent langsung.
+     */
+
+    /*
+     * 6 level Eksplorasi (Pengenal -> Lulusan), interpolasi linear RGB dari
+     * --color-muted ke --color-accent (20% per level). level-1 sengaja sama
+     * persis dengan --color-muted dan level-6 sama persis dengan
+     * --color-accent -- endpoint memang dimaksud reuse identitas warna yang
+     * sudah ada, cuma level 2-5 yang benar-benar baru.
+     */
+    --color-level-1: #979393;
+    --color-level-2: #7AA1A4;
+    --color-level-3: #5DAFB5;
+    --color-level-4: #3FBDC5;
+    --color-level-5: #22CBD6;
+    --color-level-6: #05D9E7;
+
+    /*
+     * Hierarki warna teks, 4 tingkatan (heading > subheading > body >
+     * caption), turun berjenjang lewat alpha dari Ink yang sama (bukan mix
+     * dengan putih) supaya tetap benar di atas surface/surface-alt manapun,
+     * konsisten dengan pola alpha yang dipakai --shadow-warm-*.
+     */
+    --color-heading: #1C1515;
+    --color-subheading: rgb(28 21 21 / 0.90);
+    --color-body: rgb(28 21 21 / 0.82);
+    --color-caption: #979393;
+
+    /*
+     * Named shadow-warm-* (not shadow-sm/md/lg) so pages already using
+     * Tailwind's default shadow-* utilities (unit-show, chat WEBI, ideas
+     * index, notifications bell, welcome) are untouched. Shadow color uses
+     * --color-ink's rgb instead of neutral gray, which is what makes these
+     * read as "warm" rather than a cold generic drop-shadow.
+     */
+    --shadow-warm-xs: 0 1px 2px 0 rgb(28 21 21 / 0.05), 0 1px 1px 0 rgb(28 21 21 / 0.03);
+    --shadow-warm-md: 0 6px 16px -4px rgb(28 21 21 / 0.10), 0 3px 6px -2px rgb(28 21 21 / 0.06);
+    --shadow-warm-lg: 0 16px 32px -8px rgb(28 21 21 / 0.16), 0 6px 12px -4px rgb(28 21 21 / 0.08);
+
+    /*
+     * Radius semantik. TIDAK dinamai --radius-sm/--radius-md: Tailwind v4
+     * sudah memakai nama itu untuk skalanya sendiri (--radius-sm=4px,
+     * --radius-md=6px, dipakai welcome.blade.php lewat rounded-sm/rounded-md)
+     * -- kalau ditimpa di sini, SEMUA pemakaian rounded-sm/rounded-md yang
+     * sudah ada di aplikasi berubah diam-diam. Nilai 8px/12px/16px yang
+     * diminta brief itu sendiri PERSIS sama dengan rounded-lg/xl/2xl bawaan
+     * Tailwind (sudah dikonfirmasi di docs/v_2.0/archive/sumber-konsolidasi/design-tokens-v2.md §6) -- token
+     * di bawah ini murni alias semantik supaya niatnya eksplisit di markup
+     * (radius-control/radius-card/radius-modal), bukan skala baru.
+     */
+    --radius-control: 8px;
+    --radius-card: 12px;
+    --radius-modal: 16px;
+
+    /*
+     * Border tipis, turunan --color-muted dengan alpha rendah (bukan hex
+     * pucat terpisah) supaya otomatis ikut kalau --color-muted pernah
+     * berubah. border-active pakai --color-accent langsung untuk elemen
+     * aktif/selected.
+     */
+    --color-border: rgb(151 147 147 / 0.35);
+    --color-border-active: #05D9E7;
+}
+
+/* Alpine's x-cloak convention: hide elements until Alpine finishes
+   initializing them, avoiding a flash of the wrong state. */
+[x-cloak] {
+    display: none !important;
+}
+
+/*
+ * Fase 2 Langkah 5 penyempurnaan: aksen pixel-art dekoratif di tepi bawah
+ * navbar. CSS murni (checkerboard klasik: 2 linear-gradient 45deg saling
+ * offset setengah ubin), BUKAN SVG -- tidak ada elemen/markup tambahan yang
+ * perlu diproses Blade/browser tiap request, murni properti CSS statis yang
+ * dikerjakan compositor. Opacity blok (0.14) sengaja rendah supaya tidak
+ * bersaing kontras dengan logo/ikon/avatar; mask-image memudarkannya dari
+ * padat di garis bawah ke transparan ke atas, tinggi dibatasi 18px (bukan
+ * penuh tinggi navbar) supaya murni jadi aksen tepi, bukan pattern penuh.
+ * `header` (position: sticky) sudah jadi containing block untuk `absolute`
+ * ini; `.navbar-pixel-accent` datang SEBELUM div konten navbar di markup
+ * dan div konten diberi `relative` supaya tetap tercat DI ATASNYA (aksen
+ * ini murni lapisan belakang, tidak boleh menutupi logo/ikon/avatar).
+ */
+.navbar-pixel-accent {
+    position: absolute;
+    inset-inline: 0;
+    bottom: 0;
+    height: 18px;
+    pointer-events: none;
+    background-image:
+        linear-gradient(45deg, rgb(5 217 231 / 0.14) 25%, transparent 25%, transparent 75%, rgb(5 217 231 / 0.14) 75%),
+        linear-gradient(45deg, rgb(5 217 231 / 0.14) 25%, transparent 25%, transparent 75%, rgb(5 217 231 / 0.14) 75%);
+    background-size: 10px 10px;
+    background-position: 0 0, 5px 5px;
+    -webkit-mask-image: linear-gradient(to top, black 0%, transparent 100%);
+    mask-image: linear-gradient(to top, black 0%, transparent 100%);
+}
+
+/*
+ * Fase 2 Langkah 7 (halaman login): motif sirkuit/node Retro-Tech di
+ * background (RANCANGAN_FINAL §2.1) -- CSS murni (radial-gradient untuk
+ * "node" + repeating-linear-gradient untuk "garis sirkuit"), BUKAN SVG
+ * animasi -- alasan sama dengan .navbar-pixel-accent: nol markup
+ * tambahan, browser compositor yang mengerjakan seluruhnya, jadi ini yang
+ * paling ringan untuk animasi yang jalan terus-menerus (bukan sekali
+ * trigger seperti transisi navbar). Animasi cuma menggeser
+ * `background-position` (bukan repaint bentuknya), operasi murah yang
+ * biasanya di-composite GPU oleh browser modern. `opacity: 0.07` di
+ * container menjaga keseluruhan tetap jadi lapisan belakang yang jelas
+ * dekoratif, tidak pernah bersaing kontras dengan card form di atasnya.
+ */
+.guest-bg-circuit {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.07;
+    background-image:
+        radial-gradient(circle, var(--color-accent) 1px, transparent 1.5px),
+        repeating-linear-gradient(45deg, transparent 0 38px, var(--color-accent) 38px 39px, transparent 39px 78px);
+    background-size: 42px 42px, 110px 110px;
+    animation: guest-circuit-drift 60s linear infinite;
+}
+
+@keyframes guest-circuit-drift {
+    from {
+        background-position: 0 0, 0 0;
+    }
+    to {
+        background-position: 420px 420px, -220px 330px;
+    }
+}
+
+/* Maskot "membobbing" pelan -- reinforcing kesan "menyapa", bukan diam kaku. */
+.guest-mascot-float {
+    animation: guest-mascot-bob 3.2s ease-in-out infinite;
+}
+
+@keyframes guest-mascot-bob {
+    0%, 100% {
+        transform: translateY(0);
+    }
+    50% {
+        transform: translateY(-4px);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .guest-bg-circuit,
+    .guest-mascot-float {
+        animation: none;
+    }
+}
+
+/*
+ * Fase 3 Batch 1 Putaran 4 (dashboard Eksplorasi): aksen pixel-art untuk
+ * card, teknik SAMA persis dengan .navbar-pixel-accent (checkerboard 2x
+ * linear-gradient offset setengah ubin + mask-image fade), supaya card
+ * dashboard terasa satu bahasa desain dengan navbar. Dipecah 4 arah
+ * karena ada 2 keluarga card: card "ringkasan/angka" (Total Poin,
+ * Progres Keseluruhan, Leaderboard, Daftar Praktik) pakai top+bottom;
+ * card "konten/CTA" (Modul, WEBI AI, Forum, Log) pakai left+right.
+ * Tebal 8px (lebih tipis dari 18px navbar, card jauh lebih kecil dari
+ * navbar) -- parent WAJIB `position: relative; overflow-hidden` dan
+ * padding lebih besar dari 8px supaya konten tidak pernah tertutup
+ * (semua card pemakai sudah p-5/p-6, jadi otomatis ada sisa ruang).
+ */
+.card-pixel-accent-top,
+.card-pixel-accent-bottom {
+    position: absolute;
+    inset-inline: 0;
+    height: 8px;
+    pointer-events: none;
+    background-image:
+        linear-gradient(45deg, rgb(5 217 231 / 0.16) 25%, transparent 25%, transparent 75%, rgb(5 217 231 / 0.16) 75%),
+        linear-gradient(45deg, rgb(5 217 231 / 0.16) 25%, transparent 25%, transparent 75%, rgb(5 217 231 / 0.16) 75%);
+    background-size: 8px 8px;
+    background-position: 0 0, 4px 4px;
+}
+.card-pixel-accent-top {
+    top: 0;
+    -webkit-mask-image: linear-gradient(to bottom, black 0%, transparent 100%);
+    mask-image: linear-gradient(to bottom, black 0%, transparent 100%);
+}
+.card-pixel-accent-bottom {
+    bottom: 0;
+    -webkit-mask-image: linear-gradient(to top, black 0%, transparent 100%);
+    mask-image: linear-gradient(to top, black 0%, transparent 100%);
+}
+
+.card-pixel-accent-left,
+.card-pixel-accent-right {
+    position: absolute;
+    inset-block: 0;
+    width: 8px;
+    pointer-events: none;
+    background-image:
+        linear-gradient(45deg, rgb(5 217 231 / 0.16) 25%, transparent 25%, transparent 75%, rgb(5 217 231 / 0.16) 75%),
+        linear-gradient(45deg, rgb(5 217 231 / 0.16) 25%, transparent 25%, transparent 75%, rgb(5 217 231 / 0.16) 75%);
+    background-size: 8px 8px;
+    background-position: 0 0, 4px 4px;
+}
+.card-pixel-accent-left {
+    left: 0;
+    -webkit-mask-image: linear-gradient(to right, black 0%, transparent 100%);
+    mask-image: linear-gradient(to right, black 0%, transparent 100%);
+}
+.card-pixel-accent-right {
+    right: 0;
+    -webkit-mask-image: linear-gradient(to left, black 0%, transparent 100%);
+    mask-image: linear-gradient(to left, black 0%, transparent 100%);
 }

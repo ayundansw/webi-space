@@ -8,6 +8,7 @@ use App\Models\Module;
 use App\Models\Notification;
 use App\Models\Unit;
 use App\Models\User;
+use App\Services\Exploration\PointService;
 use App\Services\Exploration\ProgressService;
 use Database\Seeders\ExplorationSampleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -81,19 +82,19 @@ class NotificationTriggersTest extends TestCase
     public function test_reaching_a_new_level_sends_a_level_up_notification(): void
     {
         $user = $this->member();
-        $service = $this->app->make(ProgressService::class);
+        $pointService = $this->app->make(PointService::class);
 
         $this->assertSame(1, $user->fresh()->explorationProgress?->current_level ?? 1);
 
-        // config('exploration.level_thresholds')[2] === 150 — award enough points to cross it in one call
-        $service->awardPoints($user, 150);
+        // config('exploration.level_thresholds')[2] === 204 (Fase 6) — award enough points to cross it in one call
+        $pointService->award($user, 204);
 
         $notification = Notification::where('recipient_id', $user->id)->where('type', 'level_up')->first();
         $this->assertNotNull($notification);
         $this->assertStringContainsString('Level 2', $notification->message);
 
         // a second, smaller award that does NOT cross another threshold must not notify again
-        $service->awardPoints($user, 5);
+        $pointService->award($user, 5);
         $this->assertSame(1, Notification::where('recipient_id', $user->id)->where('type', 'level_up')->count());
     }
 
@@ -125,7 +126,7 @@ class NotificationTriggersTest extends TestCase
         $module = Module::where('order_number', 1)->first();
 
         $thread = ForumThread::create([
-            'module_id' => $module->id, 'created_by' => $creator->id,
+            'module_id' => $module->id, 'portal' => 'exploration', 'created_by' => $creator->id,
             'title' => 'Pertanyaan', 'content' => 'Isi pertanyaan', 'target' => 'peer',
         ]);
 

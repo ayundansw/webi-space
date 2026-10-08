@@ -52,7 +52,7 @@ class GuardrailTest extends TestCase
         return $user;
     }
 
-    // Same example question as docs/spesifikasi-webi.md 1.5 tier-1 risk example.
+    // Same example question as docs/v_2.0/archive/sumber-konsolidasi/spesifikasi-webi.md 1.5 tier-1 risk example.
     private function whatsappUnit(): Unit
     {
         return Unit::where('title', 'Jenis-Jenis Produk Software')->firstOrFail();
@@ -75,8 +75,51 @@ class GuardrailTest extends TestCase
             $prompt = $request->data()['systemInstruction']['parts'][0]['text'];
 
             return str_contains($prompt, 'EVALUATION_BANK')
-                && str_contains($prompt, 'WhatsApp di ponselmu termasuk jenis produk software apa?')
-                && str_contains($prompt, 'Mobile App');
+                && str_contains($prompt, 'WhatsApp di ponselmu termasuk jenis produk software apa?');
+        });
+    }
+
+    /**
+     * SECURITY (Fase 4 Batch 3 fix): EvaluationBankBuilder::toPromptText()
+     * used to include `kunci_jawaban` (correct_answer) literally in the
+     * prompt — confirmed live, the WhatsApp question's answer ("Mobile App")
+     * was present verbatim in every request. Uses a deliberately unique,
+     * nonsense answer string (never appears anywhere else — not in this
+     * unit's curriculum content, not as a coincidental real-world term like
+     * "Mobile App" was) so this assertion can't accidentally pass for the
+     * wrong reason (e.g. the answer text happening to also appear in
+     * ordinary teaching material injected via [RELEVANT_CURRICULUM_CONTENT]).
+     */
+    public function test_correct_answer_never_appears_in_the_prompt_sent_to_gemini(): void
+    {
+        $unit = $this->whatsappUnit();
+        $user = $this->memberOnUnit($unit);
+
+        $secretAnswer = 'KUNCI_JAWABAN_RAHASIA_XQ9F2';
+        $unit->evaluations()->create([
+            'question_type' => 'multiple_choice',
+            'question_text' => 'Pertanyaan uji keamanan kunci jawaban.',
+            'options' => ['Opsi Alfa', 'Opsi Beta', $secretAnswer],
+            'correct_answer' => $secretAnswer,
+            'sort_order' => 999,
+        ]);
+
+        Http::fake(['*' => Http::response([
+            'candidates' => [['content' => ['parts' => [['text' => 'Halo!']]]]],
+        ], 200)]);
+
+        Livewire::actingAs($user)->test(Chat::class)
+            ->set('messageText', 'Halo WEBI')
+            ->call('sendMessage');
+
+        Http::assertSent(function ($request) use ($secretAnswer) {
+            $prompt = $request->data()['systemInstruction']['parts'][0]['text'];
+
+            $this->assertStringNotContainsString($secretAnswer, $prompt);
+            $this->assertStringContainsString('EVALUATION_BANK', $prompt);
+            $this->assertStringContainsString('Pertanyaan uji keamanan kunci jawaban.', $prompt);
+
+            return true;
         });
     }
 

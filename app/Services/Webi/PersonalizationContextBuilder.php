@@ -6,8 +6,8 @@ use App\Models\User;
 use App\Models\UserUnitProgress;
 
 /**
- * Builds the [USER_CONTEXT] block (docs/spesifikasi-webi.md 5.1, 2.1a) — WEBI
- * reads this data, never writes to it (docs/PRD.md 5.9).
+ * Builds the [USER_CONTEXT] block (docs/v_2.0/archive/sumber-konsolidasi/spesifikasi-webi.md 5.1, 2.1a) — WEBI
+ * reads this data, never writes to it (docs/v_2.0/archive/sumber-konsolidasi/PRD.md 5.9).
  */
 class PersonalizationContextBuilder
 {

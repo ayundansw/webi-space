@@ -2,9 +2,9 @@
 
 namespace App\Livewire\Eksplorasi\Forum;
 
-use App\Models\ForumReply;
 use App\Models\ForumThread;
 use App\Services\Exploration\Notifier;
+use App\Services\Forum\ForumService;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
@@ -18,20 +18,35 @@ class Show extends Component
 
     public function mount(ForumThread $thread): void
     {
+        // Fase 7 Batch 4: a thread with project_id set is a Forum Proyek
+        // thread (Eksekusi-only) — not a valid resource for this
+        // Eksplorasi page's route/RBAC/layout at all, so a guessed or
+        // leaked project-thread id here 404s rather than rendering (this
+        // model-bound route has no project-membership context to check
+        // even if it wanted to allow it). Mirrors the same "not a real
+        // resource here" 404 used by AttachmentDownloadController for a
+        // link/text Attachment id.
+        //
+        // Forum General Eksekusi ("utang Fase 7") also has project_id
+        // null, so `portal` is checked explicitly too now — without this,
+        // a Forum General thread id would slip past the project_id check
+        // above and render (wrongly) as if it were an Eksplorasi thread.
+        abort_if($thread->project_id !== null || $thread->portal !== 'exploration', 404);
+
         $this->thread = $thread;
     }
 
-    public function reply(Notifier $notifier): void
+    public function reply(ForumService $service, Notifier $notifier): void
     {
+        // Fase 8 Batch 3 (§2.2.A): forum.show is now open to read-only
+        // mode, so replying here needs its own explicit guard.
+        abort_if(Auth::user()->isReadOnlyExploration(), 403);
+
         $this->validate([
             'replyContent' => ['required', 'string'],
         ]);
 
-        ForumReply::create([
-            'thread_id' => $this->thread->id,
-            'user_id' => Auth::id(),
-            'content' => $this->replyContent,
-        ]);
+        $service->addReply($this->thread, Auth::user(), $this->replyContent);
 
         // PRD 3.1.8 "Balasan di thread forum yang diikuti anggota" — scoped to
         // the thread creator (the one member unambiguously "following" their
@@ -54,6 +69,7 @@ class Show extends Component
     {
         return view('livewire.eksplorasi.forum.show', [
             'replies' => $this->thread->replies()->with('user')->oldest()->get(),
+            'isReadOnlyExploration' => Auth::user()->isReadOnlyExploration(),
         ]);
     }
 }

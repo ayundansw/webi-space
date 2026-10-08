@@ -2,6 +2,7 @@
 
 namespace App\Services\Exploration;
 
+use App\Models\ChallengeSubmission;
 use App\Models\Checkpoint;
 use App\Models\ForumThread;
 use App\Models\Module;
@@ -25,13 +26,14 @@ class Notifier
         string $type,
         string $title,
         string $message,
-        Checkpoint|Unit|Module|ForumThread|null $context = null,
+        Checkpoint|Unit|Module|ForumThread|ChallengeSubmission|null $context = null,
     ): Notification {
         $contextType = match (true) {
             $context instanceof Checkpoint => 'checkpoint',
             $context instanceof Unit => 'unit',
             $context instanceof Module => 'module',
             $context instanceof ForumThread => 'forum_thread',
+            $context instanceof ChallengeSubmission => 'challenge_submission',
             default => 'none',
         };
 

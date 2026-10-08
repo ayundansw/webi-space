@@ -72,21 +72,68 @@ class ResourcesAndForumTest extends TestCase
         $this->assertSame($user->id, $thread->created_by);
     }
 
-    public function test_thread_without_module_or_unit_is_rejected(): void
+    /**
+     * Bagian A (perbaikan lanjutan, Fase 3): GANTI test_thread_without_module_or_unit_is_rejected
+     * -- aturan "wajib pilih modul atau unit" dicabut, Aye eksplisit minta
+     * thread "General" (topik umum) diizinkan. Skema sudah nullable sejak
+     * awal (create_forum_threads_table), murni business rule yang berubah.
+     */
+    public function test_thread_without_module_or_unit_is_allowed_as_general_topic(): void
     {
         $user = $this->member();
 
         Livewire::actingAs($user)->test(\App\Livewire\Eksplorasi\Forum\Create::class)
-            ->set('title', 'Judul')
-            ->set('content', 'Isi')
+            ->set('title', 'Judul Umum')
+            ->set('content', 'Pertanyaan yang tidak terikat modul/unit tertentu')
             ->set('target', 'peer')
             ->call('save')
-            ->assertHasErrors('moduleId');
+            ->assertHasNoErrors();
 
-        $this->assertDatabaseCount('forum_threads', 0);
+        $thread = ForumThread::where('title', 'Judul Umum')->first();
+        $this->assertNotNull($thread);
+        $this->assertNull($thread->module_id);
+        $this->assertNull($thread->unit_id);
+
+        Livewire::actingAs($user)->test(\App\Livewire\Eksplorasi\Forum\Index::class)
+            ->assertSee('General');
     }
 
-    public function test_member_and_admin_can_reply_to_thread_but_execution_member_cannot_access(): void
+    public function test_forum_create_thread_modal_can_be_opened_from_index_and_thread_form_component_is_embedded(): void
+    {
+        $user = $this->member();
+
+        // The Index page embeds Forum\Create as a child component (modal) --
+        // this proves the embed renders correctly (all its fields present)
+        // without needing a browser to click the Alpine-controlled trigger.
+        Livewire::actingAs($user)->test(\App\Livewire\Eksplorasi\Forum\Index::class)
+            ->assertSee('Buat Thread')
+            ->assertSeeHtml('open-thread-form')
+            ->assertSee('Posting Thread');
+    }
+
+    /**
+     * Bagian A (perbaikan lanjutan, Fase 3): tombol "Buat Thread" dipindah
+     * sejajar card breadcrumb, sama pola dengan Referensi -- full HTTP
+     * get() dipakai karena Livewire::test()->html() tidak me-render layout
+     * lengkap tempat breadcrumb ada (lihat komentar sama di ResourcesTest).
+     */
+    public function test_buat_thread_button_sits_beside_breadcrumb_card(): void
+    {
+        $member = $this->member();
+
+        $response = $this->actingAs($member)->get('/eksplorasi/forum');
+        $response->assertOk();
+
+        $html = $response->getContent();
+        $this->assertStringContainsString('Buat Thread', $html);
+        $this->assertStringContainsString('aria-label="Breadcrumb"', $html);
+
+        $buttonPos = strpos($html, 'Buat Thread');
+        $breadcrumbPos = strpos($html, 'aria-label="Breadcrumb"');
+        $this->assertLessThan($breadcrumbPos, $buttonPos, 'CTA button must render before (visually left of) the breadcrumb card.');
+    }
+
+    public function test_member_and_admin_can_reply_to_thread(): void
     {
         $user = $this->member();
         $admin = $this->admin();
@@ -94,6 +141,7 @@ class ResourcesAndForumTest extends TestCase
 
         $thread = ForumThread::create([
             'module_id' => $moduleA->id,
+            'portal' => 'exploration',
             'created_by' => $user->id,
             'title' => 'Pertanyaan',
             'content' => 'Isi pertanyaan',
@@ -108,7 +156,18 @@ class ResourcesAndForumTest extends TestCase
             'thread_id' => $thread->id,
             'user_id' => $admin->id,
         ]);
+    }
 
+    /**
+     * Fase 8 Batch 3 (§2.2.A): forum index/show are now open to
+     * execution_member in read-only mode — this assertion USED to be
+     * `assertForbidden()` (updated, not deleted, to match the intentional
+     * new behavior). Replying is still blocked, see
+     * tests/Feature/DualMode/ReadOnlyExplorationTest.php for the full
+     * write-guard sweep.
+     */
+    public function test_execution_member_can_now_read_the_forum_index_in_read_only_mode(): void
+    {
         $executionMember = User::create([
             'name' => 'Executor',
             'email' => 'executor@example.test',
@@ -117,6 +176,6 @@ class ResourcesAndForumTest extends TestCase
             'membership_status' => 'active',
         ]);
 
-        $this->actingAs($executionMember)->get('/eksplorasi/forum')->assertForbidden();
+        $this->actingAs($executionMember)->get('/eksplorasi/forum')->assertOk();
     }
 }

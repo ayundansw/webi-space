@@ -15,7 +15,7 @@ use Tests\TestCase;
 /**
  * Task 2.9 Part 1: the download route + access check, built and tested
  * before touching TaskService/the view (staged per the task instructions).
- * Access rule mirrors App\Livewire\Eksekusi\Tasks\Show::mount() exactly:
+ * Access rule mirrors App\Http\Middleware\EnsureProjectMembership exactly:
  * admin, or a member of the same project as the attachment's task.
  */
 class AttachmentDownloadTest extends TestCase

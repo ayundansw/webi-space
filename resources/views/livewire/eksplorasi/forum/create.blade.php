@@ -6,10 +6,10 @@
 
     <form wire:submit="save" class="mt-6 space-y-4 rounded-xl border border-muted/25 p-6">
         <div>
-            <label class="mb-1 block text-sm text-ink">Bahas modul atau unit mana?</label>
+            <label class="mb-1 block text-sm text-ink">Bahas modul atau unit mana? <span class="font-normal text-muted">(opsional, kosongkan untuk topik General)</span></label>
             <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <select wire:model="moduleId" class="rounded-lg border border-muted/40 px-3 py-2 text-sm focus:border-accent focus:outline-none">
-                    <option value="">-- Pilih Modul --</option>
+                    <option value="">General (tanpa modul)</option>
                     @foreach ($modules as $module)
                         <option value="{{ $module->id }}">Modul {{ $module->order_number }}: {{ $module->title }}</option>
                     @endforeach

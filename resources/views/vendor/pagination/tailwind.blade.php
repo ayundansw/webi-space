@@ -1,4 +1,4 @@
-{{-- Overrides Laravel's default Tailwind pagination view (docs/design-tokens.md
+{{-- Overrides Laravel's default Tailwind pagination view (docs/v_2.0/archive/sumber-konsolidasi/design-tokens.md
      border/radius/warna tokens) — the framework default uses generic
      gray/blue-300 focus-ring styling that doesn't match this app's palette. --}}
 @if ($paginator->hasPages())

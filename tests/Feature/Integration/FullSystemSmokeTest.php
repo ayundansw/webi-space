@@ -4,9 +4,11 @@ namespace Tests\Feature\Integration;
 
 use App\Livewire\Admin\Dashboard as AdminDashboard;
 use App\Livewire\Admin\Users\Create as UsersCreate;
-use App\Livewire\Eksekusi\Ideas\Approve as IdeasApprove;
 use App\Livewire\Eksekusi\Ideas\Create as IdeasCreate;
-use App\Livewire\Eksekusi\Projects\Show as ProjectsShow;
+use App\Livewire\Eksekusi\Ideas\Index as IdeasIndex;
+use App\Livewire\Eksekusi\Projects\Create as ProjectsCreate;
+use App\Livewire\Eksekusi\Projects\ProjectHeader;
+use App\Livewire\Eksekusi\Projects\Tabs\Anggota as ProjectsAnggota;
 use App\Livewire\Eksekusi\Tasks\Create as TasksCreate;
 use App\Livewire\Eksekusi\Tasks\Show as TasksShow;
 use App\Livewire\Eksplorasi\CheckpointShow;
@@ -79,9 +81,14 @@ class FullSystemSmokeTest extends TestCase
         }
 
         $checkpoint = Checkpoint::where('module_id', $module1->id)->firstOrFail();
-        Livewire::actingAs($exploration)->test(CheckpointShow::class, ['checkpoint' => $checkpoint])
-            ->set('intermezoAnswers.0', 'Bagian yang paling baru buatku adalah SDLC.')
-            ->set('formTanggapan', 'Modul ini seru dan mudah diikuti.')
+        $checkpointComponent = Livewire::actingAs($exploration)->test(CheckpointShow::class, ['checkpoint' => $checkpoint]);
+        // v2.0 Module 1's checkpoint has 2 intermezo questions (the old v1.0
+        // fixture this test was originally written against had only 1) —
+        // submit() requires a non-empty answer for every question index.
+        foreach ($checkpoint->intermezo_questions as $index => $question) {
+            $checkpointComponent->set("intermezoAnswers.{$index}", 'Bagian yang paling baru buatku adalah SDLC.');
+        }
+        $checkpointComponent->set('formTanggapan', 'Modul ini seru dan mudah diikuti.')
             ->call('submit');
 
         $expectedPoints = $units->sum('point_value') + 25;
@@ -114,7 +121,7 @@ class FullSystemSmokeTest extends TestCase
         $chat->assertSee('Rekomendasi Unit');
         $this->assertStringContainsString('/eksplorasi/unit/'.$currentUnit->id, $chat->html());
 
-        // ================= EKSEKUSI: idea -> approve -> task -> done =================
+        // ================= EKSEKUSI: idea -> approve -> (manual project) -> task -> done =================
         Livewire::actingAs($execution)->test(IdeasCreate::class)
             ->set('title', 'Redesain Landing Page Divisi')
             ->set('description', 'Perbarui tampilan landing page supaya lebih modern.')
@@ -124,20 +131,34 @@ class FullSystemSmokeTest extends TestCase
         $idea = ProjectIdea::where('title', 'Redesain Landing Page Divisi')->firstOrFail();
         $this->assertSame('draft', $idea->status);
 
-        Livewire::actingAs($admin)->test(IdeasApprove::class, ['idea' => $idea])
+        // Project Idea + Project independence (2026-07-17): approve() only
+        // flips status, it never creates a Project anymore.
+        Livewire::actingAs($admin)->test(IdeasIndex::class)
+            ->call('changeStatus', $idea->id, 'approved');
+
+        $this->assertSame('approved', $idea->fresh()->status);
+        $this->assertNull($idea->fresh()->promoted_to_project_id, 'approve() must never auto-link a Project.');
+        $this->assertDatabaseCount('projects', 0);
+
+        // Idea and Project are fully independent now — admin creates the
+        // Project separately and manually via "Buat Proyek Langsung", same
+        // as any project that never originated from an idea at all.
+        Livewire::actingAs($admin)->test(ProjectsCreate::class)
+            ->set('title', 'Redesain Landing Page Divisi')
+            ->set('description', 'Perbarui tampilan landing page supaya lebih modern.')
+            ->set('objective', 'Meningkatkan citra divisi ke calon anggota baru.')
             ->set('projectType', 'internal')
             ->set('startDate', '2026-07-05')
             ->set('targetEndDate', '2026-08-05')
             ->call('save');
 
         $project = Project::where('title', 'Redesain Landing Page Divisi')->firstOrFail();
-        $this->assertSame('approved', $idea->fresh()->status);
 
-        Livewire::actingAs($admin)->test(ProjectsShow::class, ['project' => $project])
+        Livewire::actingAs($admin)->test(ProjectsAnggota::class, ['project' => $project])
             ->set('newMemberId', $execution->id)
             ->call('addMember');
 
-        Livewire::actingAs($admin)->test(ProjectsShow::class, ['project' => $project])
+        Livewire::actingAs($admin)->test(ProjectHeader::class, ['project' => $project])
             ->set('milestoneTitle', 'Tahap 1: Desain')
             ->set('milestoneTargetDate', '2026-07-20')
             ->call('addMilestone');
@@ -206,6 +227,12 @@ class FullSystemSmokeTest extends TestCase
                     fn ($right, $left) => $component->set("quizAnswers.{$question->id}.{$left}", $right)
                 ),
                 'ordering' => $component->set("quizAnswers.{$question->id}", $question->correct_answer),
+                // v2.0: a quiz_multiple_choice unit can embed an essay sub-question
+                // (e.g. Unit 1.1) whose correct_answer is null — submitQuiz() still
+                // requires a non-empty string for it (validated the same as the
+                // standalone essay/practice path), so it needs real text here,
+                // not the (null) correct_answer.
+                'essay' => $component->set("quizAnswers.{$question->id}", 'Jawaban esai untuk soal tambahan ini, ditulis sebagai bagian dari smoke test end-to-end.'),
                 default => $component->set("quizAnswers.{$question->id}", $question->correct_answer),
             };
         }

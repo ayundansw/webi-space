@@ -53,7 +53,10 @@ return [
          * write here — never web-accessible directly. Served only through
          * App\Http\Controllers\Eksekusi\AttachmentDownloadController, which
          * checks auth + project membership before streaming (same rule as
-         * App\Livewire\Eksekusi\Tasks\Show::mount()).
+         * App\Http\Middleware\EnsureProjectMembership, consolidated there
+         * Fase 7 Batch 1a — this controller keeps its own inline copy since
+         * its route is keyed by {attachment}, not {project}/{task}, so it
+         * can't sit behind that middleware directly).
          *
          * Deliberately its OWN disk, not the 'local' disk above — Livewire's
          * temporary file upload mechanism also defaults to the app's default

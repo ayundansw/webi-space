@@ -6,13 +6,11 @@ use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
 /**
- * Task 2.7: production/dev seeding entrypoint (`php artisan migrate:fresh --seed`).
- * Seeds ONLY the real curriculum content — no sample/dummy data, no users of
- * any kind. `ExplorationSampleSeeder` stays test-only (called explicitly via
- * `$this->seed(ExplorationSampleSeeder::class)` in test setUp() methods, never
- * from here). The first admin account is created afterward via the
- * interactive `php artisan app:create-admin` command — never hardcoded here,
- * per the no-hardcoded-credentials rule from task 2.1 (public repo).
+ * Fase 0 + kurikulum v2.0 + Praktik + Eksekusi: entrypoint seeding
+ * produksi/dev (`php artisan migrate:fresh --seed`). AccountSeeder (16
+ * akun), CurriculumSeeder (10 modul/42 unit), ChallengeSeeder (15
+ * Challenge + Track Map), dan ExecutionSeeder (4 Project Ideas + 1 Project
+ * dummy) semua disambungkan di sini -- satu proses seed lengkap.
  */
 class DatabaseSeeder extends Seeder
 {
@@ -23,6 +21,9 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        $this->call(AccountSeeder::class);
         $this->call(CurriculumSeeder::class);
+        $this->call(ChallengeSeeder::class);
+        $this->call(ExecutionSeeder::class);
     }
 }

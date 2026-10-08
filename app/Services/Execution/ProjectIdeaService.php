@@ -2,24 +2,33 @@
 
 namespace App\Services\Execution;
 
-use App\Models\Project;
 use App\Models\ProjectIdea;
 use App\Models\User;
 
 /**
- * ActivityLog.project_id is a required (non-nullable) FK to projects — confirmed
- * final by the user (2026-07-03), not changed. `idea_created` and `idea_rejected`
- * (from Lampiran A's action_type list) are therefore deliberately NOT logged to
- * ActivityLog: they happen before any Project exists (a rejected idea never gets
- * one at all), so there's no project_id to log against. ProjectIdea's own
- * `status` + `created_at`/`updated_at` columns serve as that history instead —
- * no separate audit trail needed for these two events. Only `idea_approved` is
- * logged (against the Project created at that same moment).
+ * Project Idea + Project independence (revisi, 2026-07-17, dikonfirmasi Aye):
+ * approve() SEKARANG HANYA mengubah status ProjectIdea, TIDAK PERNAH membuat
+ * Project. Sebelumnya ada auto-create Project di sini (ditandai eksplisit di
+ * docblock lama sebagai "keputusan yang belum dikonfirmasi Aye" sejak awal) —
+ * sekarang dipisah total: kalau sebuah ide mau direalisasikan, admin bikin
+ * Project baru secara manual dan terpisah lewat "Buat Proyek Langsung"
+ * (`Eksekusi\Projects\Create` / `ProjectService::createDirect()`), tanpa
+ * keterkaitan otomatis ke ide asalnya. `promoted_to_project_id` TETAP ada di
+ * skema (tidak dihapus, dormant untuk kemungkinan pemakaian manual lain nanti)
+ * tapi tidak pernah lagi diisi lewat method ini.
+ *
+ * ActivityLog.project_id tetap required (non-nullable) FK ke projects —
+ * confirmed final oleh user (2026-07-03), tidak diubah. `idea_created` dan
+ * `idea_rejected` sudah lebih dulu TIDAK dicatat ke ActivityLog dengan alasan
+ * ini (event terjadi sebelum ada Project, tidak ada project_id untuk dicatat).
+ * `idea_approved` sekarang ikut prinsip yang SAMA PERSIS (approve juga tidak
+ * lagi terjadi bersamaan dengan Project apa pun) — status ProjectIdea sendiri
+ * (`status` + `created_at`/`updated_at`) sudah cukup jadi riwayatnya, TIDAK
+ * ada lagi ActivityLog apa pun yang ditulis dari service ini.
  */
 class ProjectIdeaService
 {
     public function __construct(
-        private ActivityLogger $logger,
         private Notifier $notifier,
     ) {}
 
@@ -34,50 +43,18 @@ class ProjectIdeaService
         ]);
     }
 
-    public function approve(ProjectIdea $idea, User $admin, array $projectData): Project
+    public function approve(ProjectIdea $idea, User $admin): ProjectIdea
     {
-        $project = Project::create([
-            'title' => $idea->title,
-            'description' => $idea->description,
-            'objective' => $idea->purpose,
-            'project_type' => $projectData['project_type'],
-            'status' => 'planning',
-            'originated_from_idea_id' => $idea->id,
-            'start_date' => $projectData['start_date'],
-            'target_end_date' => $projectData['target_end_date'],
-            'created_by' => $admin->id,
-        ]);
-
-        $idea->update([
-            'status' => 'approved',
-            'promoted_to_project_id' => $project->id,
-        ]);
-
-        $this->logger->log(
-            $project,
-            null,
-            $admin,
-            'idea_approved',
-            "Admin meng-approve ide: {$idea->title}",
-        );
-
-        $this->logger->log(
-            $project,
-            null,
-            $admin,
-            'project_created',
-            "Proyek '{$project->title}' dibuat oleh admin",
-        );
+        $idea->update(['status' => 'approved']);
 
         $this->notifier->send(
             $idea->proposer,
             'idea_status_changed',
             'Ide kamu di-approve',
-            "Ide kamu '{$idea->title}' sudah di-approve dan menjadi proyek aktif.",
-            $project,
+            "Ide kamu '{$idea->title}' sudah disetujui.",
         );
 
-        return $project;
+        return $idea;
     }
 
     public function reject(ProjectIdea $idea, User $admin, string $reason): ProjectIdea
@@ -95,5 +72,25 @@ class ProjectIdeaService
         );
 
         return $idea;
+    }
+
+    /**
+     * Single entry point for the "Ubah Status" action available on EVERY
+     * card regardless of its current status (draft/approved/rejected, any
+     * direction) — approve()/reject() no longer have Project side effects,
+     * so free status changes are safe. Dispatches to approve()/reject()
+     * above for those two targets (reusing their notification wording
+     * as-is); reverting to 'draft' is a plain status reset with no
+     * notification (there's no "kamu dikembalikan ke draft" wording
+     * anywhere in the app's notification vocabulary, and this is expected
+     * to be a rare corrective action, not a normal lifecycle step).
+     */
+    public function changeStatus(ProjectIdea $idea, User $admin, string $newStatus, ?string $reason = null): ProjectIdea
+    {
+        return match ($newStatus) {
+            'approved' => $this->approve($idea, $admin),
+            'rejected' => $this->reject($idea, $admin, $reason ?? ''),
+            default => tap($idea)->update(['status' => $newStatus, 'rejection_reason' => null]),
+        };
     }
 }

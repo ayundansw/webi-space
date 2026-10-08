@@ -13,47 +13,19 @@ use App\Models\UserUnitProgress;
 use Illuminate\Support\Carbon;
 
 /**
- * Proactive greetings (docs/spesifikasi-webi.md 3.2, Mode B). Checked when the
- * user opens the WEBI chat page — the doc itself frames delivery as "muncul di
- * antarmuka chat saat user membuka WEBI-SPACE, bukan sebagai push notification
- * eksternal" (3.2), so there's no separate background scheduler; this runs
- * synchronously from `Chat::mount()`.
+ * Proactive greetings (spesifikasi-webi.md 3.2, Mode B) — checked when the
+ * user opens the WEBI chat page, no background scheduler.
  *
- * Schema note: ProactiveLog has no payload field to record WHICH level or
- * checkpoint a level_up/checkpoint message already celebrated (docs/arsitektur-
- * database.md and the 2.0 migration only store trigger_type + sent_at/responded).
- * So "already celebrated" is inferred by COUNT: if the user has reached level 3
- * and only 1 level_up log exists, one level-up is still uncelebrated. This is a
- * schema-driven approximation, flagged in the task 2.5 report — same category of
- * issue as the Eksekusi module's existing "alert first-occurrence" gap
- * (AlertService::notifyOnceForContext).
+ * ProactiveLog has no payload for which level/checkpoint was celebrated, so
+ * it's inferred from log COUNT vs. the user's current level/checkpoint count.
  *
- * Overlap check against 2.2's `App\Services\Exploration\ProgressService::feedFor()`
- * (checked 2026-07-04, per explicit user request):
- * - Trigger 4 (level_up): NO overlap. feedFor() only ever emits unit-completion
- *   and checkpoint-completion entries — it has no level-transition event at all
- *   (the Eksplorasi dashboard shows current_level only as a static stat badge,
- *   never as a "you just leveled up" feed entry). Safe as-is.
- * - Trigger 5 (checkpoint): REAL overlap. feedFor() already emits "Modul {title}
- *   tuntas! Kamu dapat {points} poin bonus checkpoint..." for the exact same
- *   CheckpointCompletion row. Kept both (Trigger 5 is explicitly required by
- *   docs/spesifikasi-webi.md 3.2), but they're differentiated on purpose:
- *     - Channel: feedFor() is a PASSIVE list on the Eksplorasi dashboard, only
- *       seen if the user visits that page. Trigger 5 is an ACTIVE proactive
- *       message injected into the WEBI chat the next time it's opened.
- *     - Framing: checkpointMessage() below deliberately does NOT lead with
- *       "Modul X selesai!" (which would just restate what the dashboard feed
- *       already announced) — it leads as WEBI reacting to something it noticed,
- *       and its real added value is the forward-looking next-module preview +
- *       invitation to keep talking, which the passive feed can't offer.
- *     - Scope: feedFor() logs EVERY unit AND every checkpoint (dozens of
- *       entries); Trigger 5 only ever fires for checkpoints (9 total), so it's
- *       reserved for bigger milestones, not routine unit completions.
+ * Trigger 5 (checkpoint) intentionally overlaps with feedFor()'s passive
+ * dashboard feed with an active, forward-looking chat message instead.
  */
 class ProactiveService
 {
     // L1: Modul 1-2, L2: Modul 3, L3: Modul 4-5, L4: Modul 6-7, L5: Modul 8-9, L6: Modul 10
-    // per docs/kurikulum-eksplorasi.md's level-to-module mapping (confirmed in task 2.3).
+    // per docs/v_2.0/archive/sumber-konsolidasi/kurikulum-eksplorasi.md's level-to-module mapping (confirmed in task 2.3).
     private const LEVEL_MODULE_RANGES = [
         1 => [1, 2],
         2 => [3, 3],

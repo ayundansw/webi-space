@@ -29,6 +29,80 @@
         @endif
     </div>
 
+    @if (! $task->parent_task_id)
+        <div class="mt-8">
+            <h2 class="font-display text-lg font-bold text-ink">Subtask</h2>
+            <div class="mt-3 space-y-2">
+                @forelse ($subtasks as $subtask)
+                    <div class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-muted/25 p-3">
+                        <div>
+                            <p class="text-sm font-medium text-ink">{{ $subtask->title }}</p>
+                            <p class="text-xs text-muted">
+                                {{ $subtask->assignments->pluck('user.name')->join(', ') ?: 'Belum ada assignee' }}
+                                &middot; Deadline {{ $subtask->deadline->format('d M Y') }}
+                            </p>
+                        </div>
+                        <select wire:change="changeSubtaskStatus('{{ $subtask->id }}', $event.target.value)" class="rounded-lg border border-muted/40 px-2 py-1 text-xs font-mono uppercase text-ink focus:border-accent focus:outline-none">
+                            <option value="todo" @selected($subtask->status === 'todo')>Todo</option>
+                            <option value="in_progress" @selected($subtask->status === 'in_progress')>In Progress</option>
+                            <option value="in_review" @selected($subtask->status === 'in_review')>In Review</option>
+                            <option value="done" @selected($subtask->status === 'done')>Done</option>
+                        </select>
+                    </div>
+                @empty
+                    <p class="text-sm text-muted">Belum ada subtask.</p>
+                @endforelse
+            </div>
+
+            @error('subtaskStatus') <p class="mt-2 text-xs text-red-600">{{ $message }}</p> @enderror
+
+            <form wire:submit="addSubtask" class="mt-3 grid grid-cols-1 gap-2 rounded-lg border border-muted/25 p-3 sm:grid-cols-3">
+                <div class="sm:col-span-3">
+                    <input type="text" wire:model="newSubtaskTitle" placeholder="Judul subtask" class="w-full rounded-lg border border-muted/40 px-3 py-1.5 text-sm focus:border-accent focus:outline-none">
+                    @error('newSubtaskTitle') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                </div>
+                <select wire:model="newSubtaskAssigneeId" class="w-full rounded-lg border border-muted/40 px-2 py-1.5 text-sm focus:border-accent focus:outline-none">
+                    <option value="">Assignee (opsional)</option>
+                    @foreach ($projectMembers as $member)
+                        <option value="{{ $member->user_id }}">{{ $member->user->name }}</option>
+                    @endforeach
+                </select>
+                <input type="date" wire:model="newSubtaskDeadline" placeholder="Deadline (opsional)" class="w-full rounded-lg border border-muted/40 px-2 py-1.5 text-sm focus:border-accent focus:outline-none">
+                <button type="submit" class="rounded-lg bg-ink px-3 py-1.5 text-xs font-medium text-white hover:bg-ink/90 sm:col-span-3">+ Tambah Subtask</button>
+            </form>
+        </div>
+    @endif
+
+    @if (! $task->parent_task_id)
+        <div class="mt-8">
+            <h2 class="font-display text-lg font-bold text-ink">Bergantung pada</h2>
+            <p class="text-xs text-muted">Task ini tidak bisa dianggap tuntas sebelum task yang terdaftar di sini selesai.</p>
+
+            <div class="mt-3 space-y-2">
+                @forelse ($dependencies as $dependency)
+                    <div class="rounded-lg border border-muted/25 p-3">
+                        <p class="text-sm font-medium text-ink">{{ $dependency->dependsOn->title }}</p>
+                        <p class="text-xs text-muted">Status: <span class="font-mono uppercase">{{ $dependency->dependsOn->status }}</span></p>
+                    </div>
+                @empty
+                    <p class="text-sm text-muted">Task ini tidak bergantung pada task lain.</p>
+                @endforelse
+            </div>
+
+            @error('newDependencyTaskId') <p class="mt-2 text-xs text-red-600">{{ $message }}</p> @enderror
+
+            <form wire:submit="addDependency" class="mt-3 flex flex-wrap gap-2">
+                <select wire:model="newDependencyTaskId" class="flex-1 rounded-lg border border-muted/40 px-2 py-1.5 text-sm focus:border-accent focus:outline-none">
+                    <option value="">Pilih task...</option>
+                    @foreach ($availableDependencyTasks as $candidate)
+                        <option value="{{ $candidate->id }}">{{ $candidate->title }}</option>
+                    @endforeach
+                </select>
+                <button type="submit" class="rounded-lg bg-ink px-3 py-1.5 text-xs font-medium text-white hover:bg-ink/90">+ Tambah Dependency</button>
+            </form>
+        </div>
+    @endif
+
     @if (auth()->user()->role === 'admin')
         <div class="mt-8 grid grid-cols-1 gap-6 md:grid-cols-3">
             <form wire:submit="changeDeadline" class="rounded-lg border border-muted/25 p-3">

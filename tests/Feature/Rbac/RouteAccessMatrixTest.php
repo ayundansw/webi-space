@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Rbac;
 
+use App\Livewire\Eksekusi\Ideas\Index as IdeasIndex;
 use App\Models\Checkpoint;
 use App\Models\ForumThread;
 use App\Models\Milestone;
@@ -15,11 +16,12 @@ use App\Models\Unit;
 use App\Models\User;
 use Database\Seeders\ExplorationSampleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Livewire\Livewire;
 use Tests\TestCase;
 
 /**
  * Task 2.6 Batch 1: exhaustive route-by-role matrix, cross-checked against
- * docs/PRD.md Bagian 2 (hak akses per role). Every GET route declared in
+ * docs/v_2.0/archive/sumber-konsolidasi/PRD.md Bagian 2 (hak akses per role). Every GET route declared in
  * routes/web.php is exercised here for admin, exploration_member,
  * execution_member, and guest, asserting exactly the access PRD 2.1-2.3
  * grants — not just the dashboards (already covered narrowly by
@@ -169,7 +171,35 @@ class RouteAccessMatrixTest extends TestCase
         $this->actingAs($admin)->get("/admin/webi/{$execution->id}")->assertNotFound();
     }
 
-    public function test_exploration_only_routes_reject_execution_member_and_admin(): void
+    /**
+     * eksplorasi.dashboard is NOT part of Fase 8 Batch 3's read-only
+     * expansion (RECON_fase8_mode_ganda.md flagged it "perlu keputusan",
+     * and this batch's prompt only listed Peta Kurikulum/Unit/Checkpoint/
+     * Resources/Forum) — stays real-exploration_member-only, admin still
+     * excluded too (unrelated to either mode grant).
+     */
+    public function test_exploration_dashboard_still_rejects_execution_member_and_admin(): void
+    {
+        $exploration = $this->explorationMember();
+        $execution = $this->executionMember();
+        $admin = $this->admin();
+
+        $this->actingAs($exploration)->get('/eksplorasi/dashboard')->assertOk();
+        $this->actingAs($execution)->get('/eksplorasi/dashboard')->assertForbidden();
+        $this->actingAs($admin)->get('/eksplorasi/dashboard')->assertForbidden();
+    }
+
+    /**
+     * Fase 8 Batch 3 (§2.2.A): these 5 routes are now open to
+     * execution_member in read-only mode (`mode:exploration`, replacing
+     * `role:exploration_member`) — this test USED to assert 403 for
+     * execution_member here too (updated, not deleted, to match the
+     * intentional new behavior; see
+     * tests/Feature/DualMode/ReadOnlyExplorationTest.php for the full
+     * read-access + write-guard sweep). Admin stays excluded — `mode:exploration`
+     * was never admin-inclusive, same as `role:exploration_member` before it.
+     */
+    public function test_exploration_read_routes_now_allow_execution_member_but_still_reject_admin(): void
     {
         $exploration = $this->explorationMember();
         $execution = $this->executionMember();
@@ -177,8 +207,7 @@ class RouteAccessMatrixTest extends TestCase
         $unit = Unit::where('order_number', 1)->first();
         $checkpoint = Checkpoint::first();
 
-        $explorationOnlyRoutes = [
-            '/eksplorasi/dashboard',
+        $readOpenRoutes = [
             '/eksplorasi/kurikulum',
             "/eksplorasi/unit/{$unit->id}",
             "/eksplorasi/checkpoint/{$checkpoint->id}",
@@ -186,14 +215,23 @@ class RouteAccessMatrixTest extends TestCase
             '/eksplorasi/webi',
         ];
 
-        foreach ($explorationOnlyRoutes as $route) {
+        foreach ($readOpenRoutes as $route) {
             $this->actingAs($exploration)->get($route)->assertOk();
-            $this->actingAs($execution)->get($route)->assertForbidden();
+            $this->actingAs($execution)->get($route)->assertOk();
             $this->actingAs($admin)->get($route)->assertForbidden();
         }
     }
 
-    public function test_exploration_forum_allows_admin_but_rejects_execution_member(): void
+    /**
+     * Fase 8 Batch 3: forum index/show are now open to execution_member
+     * read-only mode (this assertion USED to be assertForbidden() for all
+     * 3 routes -- updated, not deleted). /forum/create stays closed
+     * (deliberately NOT opened, see Forum\Create's own docblock — it's
+     * pure-write, nothing for read-only mode to gain from the route
+     * itself, though the component's save() is separately guarded too
+     * since it's ALSO reachable as a nested modal from the now-open index).
+     */
+    public function test_exploration_forum_index_and_show_now_allow_execution_member_but_create_stays_closed(): void
     {
         $exploration = $this->explorationMember();
         $execution = $this->executionMember();
@@ -202,17 +240,22 @@ class RouteAccessMatrixTest extends TestCase
 
         $thread = ForumThread::create([
             'module_id' => $module->id,
+            'portal' => 'exploration',
             'created_by' => $exploration->id,
             'title' => 'Pertanyaan',
             'content' => 'Isi pertanyaan',
             'target' => 'peer',
         ]);
 
-        foreach (["/eksplorasi/forum", '/eksplorasi/forum/create', "/eksplorasi/forum/{$thread->id}"] as $route) {
+        foreach (["/eksplorasi/forum", "/eksplorasi/forum/{$thread->id}"] as $route) {
             $this->actingAs($exploration)->get($route)->assertOk();
             $this->actingAs($admin)->get($route)->assertOk();
-            $this->actingAs($execution)->get($route)->assertForbidden();
+            $this->actingAs($execution)->get($route)->assertOk();
         }
+
+        $this->actingAs($exploration)->get('/eksplorasi/forum/create')->assertOk();
+        $this->actingAs($admin)->get('/eksplorasi/forum/create')->assertOk();
+        $this->actingAs($execution)->get('/eksplorasi/forum/create')->assertForbidden();
     }
 
     public function test_execution_only_routes_reject_exploration_member_and_admin_where_admin_has_no_extra_grant(): void
@@ -240,40 +283,62 @@ class RouteAccessMatrixTest extends TestCase
             'proposed_by' => $execution->id, 'status' => 'draft',
         ]);
 
-        $sharedRoutes = [
+        // Fase 7 Batch 1a: all 6 project tabs, not just Kanban — proves the
+        // consolidated `project.member` middleware covers every one of them
+        // uniformly, not just the routes that happened to carry the old
+        // copy-pasted abort_if().
+        $projectTabRoutes = [
+            "/eksekusi/projects/{$project->id}",
+            "/eksekusi/projects/{$project->id}/kanban",
+            "/eksekusi/projects/{$project->id}/roadmap",
+            "/eksekusi/projects/{$project->id}/gantt",
+            "/eksekusi/projects/{$project->id}/kalender",
+            "/eksekusi/projects/{$project->id}/forum",
+            "/eksekusi/projects/{$project->id}/anggota",
+        ];
+
+        $sharedRoutes = array_merge([
             '/eksekusi/ideas',
             '/eksekusi/ideas/create',
-            "/eksekusi/ideas/{$idea->id}/approve",
             '/eksekusi/projects',
-            "/eksekusi/projects/{$project->id}",
-            "/eksekusi/projects/{$project->id}/board",
+        ], $projectTabRoutes, [
             "/eksekusi/projects/{$project->id}/tasks/create",
             "/eksekusi/tasks/{$task->id}",
-        ];
+        ]);
 
         foreach ($sharedRoutes as $route) {
             $this->actingAs($exploration)->get($route)->assertForbidden();
         }
 
         // admin can reach all of them; execution_member (project member) can reach
-        // all except the two admin-only actions (create project directly, approve idea)
+        // all except the one admin-only action left (create project directly).
+        // Approving an idea is no longer its own route (Project Idea/Project
+        // independence revision, 2026-07-17) — it's a role-gated method on
+        // the Index component itself, checked via Livewire::test below.
         $this->actingAs($admin)->get('/eksekusi/ideas')->assertOk();
         $this->actingAs($admin)->get('/eksekusi/ideas/create')->assertOk();
-        $this->actingAs($admin)->get("/eksekusi/ideas/{$idea->id}/approve")->assertOk();
+        Livewire::actingAs($admin)->test(IdeasIndex::class)->call('changeStatus', $idea->id, 'approved')->assertOk();
         $this->actingAs($admin)->get('/eksekusi/projects')->assertOk();
-        $this->actingAs($admin)->get("/eksekusi/projects/{$project->id}")->assertOk();
-        $this->actingAs($admin)->get("/eksekusi/projects/{$project->id}/board")->assertOk();
+        foreach ($projectTabRoutes as $route) {
+            $this->actingAs($admin)->get($route)->assertOk();
+        }
         $this->actingAs($admin)->get("/eksekusi/projects/{$project->id}/tasks/create")->assertOk();
-        $this->actingAs($admin)->get("/eksekusi/tasks/{$task->id}")->assertOk();
+        // Fase 7 Batch 1b: Detail Task is a redirect now (to the Kanban tab
+        // with ?task= so the slide-over panel auto-opens there), not a page
+        // of its own — 302, not 200.
+        $this->actingAs($admin)->get("/eksekusi/tasks/{$task->id}")
+            ->assertRedirect("/eksekusi/projects/{$project->id}/kanban?task={$task->id}");
 
         $this->actingAs($execution)->get('/eksekusi/ideas')->assertOk();
         $this->actingAs($execution)->get('/eksekusi/ideas/create')->assertOk();
-        $this->actingAs($execution)->get("/eksekusi/ideas/{$idea->id}/approve")->assertForbidden();
+        Livewire::actingAs($execution)->test(IdeasIndex::class)->call('changeStatus', $idea->id, 'approved')->assertForbidden();
         $this->actingAs($execution)->get('/eksekusi/projects')->assertOk();
-        $this->actingAs($execution)->get("/eksekusi/projects/{$project->id}")->assertOk();
-        $this->actingAs($execution)->get("/eksekusi/projects/{$project->id}/board")->assertOk();
+        foreach ($projectTabRoutes as $route) {
+            $this->actingAs($execution)->get($route)->assertOk();
+        }
         $this->actingAs($execution)->get("/eksekusi/projects/{$project->id}/tasks/create")->assertOk();
-        $this->actingAs($execution)->get("/eksekusi/tasks/{$task->id}")->assertOk();
+        $this->actingAs($execution)->get("/eksekusi/tasks/{$task->id}")
+            ->assertRedirect("/eksekusi/projects/{$project->id}/kanban?task={$task->id}");
     }
 
     public function test_execution_member_cannot_view_project_or_task_they_are_not_a_member_of(): void
@@ -293,8 +358,13 @@ class RouteAccessMatrixTest extends TestCase
 
         // PRD 2.2: "Proyek yang dia tidak terlibat sebagai anggota tim" must be blocked,
         // even though the route itself allows the execution_member role generally.
-        $this->actingAs($execution)->get("/eksekusi/projects/{$foreignProject->id}")->assertForbidden();
-        $this->actingAs($execution)->get("/eksekusi/projects/{$foreignProject->id}/board")->assertForbidden();
+        // Fase 7 Batch 1a: every tab, not just Kanban — the whole point of
+        // consolidating the check into one middleware is that it can never
+        // be "forgotten" on a subset of routes the way copy-pasted abort_if()
+        // calls could.
+        foreach (['', '/kanban', '/roadmap', '/gantt', '/kalender', '/forum', '/anggota'] as $tab) {
+            $this->actingAs($execution)->get("/eksekusi/projects/{$foreignProject->id}{$tab}")->assertForbidden();
+        }
         $this->actingAs($execution)->get("/eksekusi/projects/{$foreignProject->id}/tasks/create")->assertForbidden();
         $this->actingAs($execution)->get("/eksekusi/tasks/{$foreignTask->id}")->assertForbidden();
 
@@ -331,23 +401,22 @@ class RouteAccessMatrixTest extends TestCase
         $checkpoint = Checkpoint::first();
         $thread = ForumThread::create([
             'module_id' => Module::where('order_number', 1)->first()->id,
+            'portal' => 'exploration',
             'created_by' => $exploration->id,
             'title' => 'Pertanyaan', 'content' => 'Isi', 'target' => 'peer',
         ]);
-        $idea = ProjectIdea::create([
-            'title' => 'Ide', 'description' => 'D', 'purpose' => 'P',
-            'proposed_by' => $execution->id, 'status' => 'draft',
-        ]);
-
         $protectedRoutes = [
             '/admin/dashboard', '/admin/users', '/admin/users/create', "/admin/users/{$exploration->id}/edit",
             '/admin/webi', "/admin/webi/{$exploration->id}",
             '/eksplorasi/dashboard', '/eksplorasi/kurikulum', "/eksplorasi/unit/{$unit->id}",
             "/eksplorasi/checkpoint/{$checkpoint->id}", '/eksplorasi/resources', '/eksplorasi/webi',
             '/eksplorasi/forum', '/eksplorasi/forum/create', "/eksplorasi/forum/{$thread->id}",
-            '/eksekusi/dashboard', '/eksekusi/ideas', '/eksekusi/ideas/create', "/eksekusi/ideas/{$idea->id}/approve",
+            '/eksekusi/dashboard', '/eksekusi/ideas', '/eksekusi/ideas/create',
             '/eksekusi/projects', '/eksekusi/projects/create',
-            "/eksekusi/projects/{$project->id}", "/eksekusi/projects/{$project->id}/board",
+            "/eksekusi/projects/{$project->id}", "/eksekusi/projects/{$project->id}/kanban",
+            "/eksekusi/projects/{$project->id}/roadmap", "/eksekusi/projects/{$project->id}/gantt",
+            "/eksekusi/projects/{$project->id}/kalender", "/eksekusi/projects/{$project->id}/forum",
+            "/eksekusi/projects/{$project->id}/anggota",
             "/eksekusi/projects/{$project->id}/tasks/create", "/eksekusi/tasks/{$task->id}",
         ];
 

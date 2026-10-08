@@ -3,7 +3,8 @@
 namespace Tests\Feature\Execution;
 
 use App\Livewire\Eksekusi\Projects\Create;
-use App\Livewire\Eksekusi\Projects\Show;
+use App\Livewire\Eksekusi\Projects\ProjectHeader;
+use App\Livewire\Eksekusi\Projects\Tabs\Anggota;
 use App\Models\Milestone;
 use App\Models\Project;
 use App\Models\ProjectMember;
@@ -107,7 +108,7 @@ class ProjectManagementTest extends TestCase
         $member = $this->executionMember();
         $project = $this->project($admin);
 
-        Livewire::actingAs($admin)->test(Show::class, ['project' => $project])
+        Livewire::actingAs($admin)->test(Anggota::class, ['project' => $project])
             ->set('newMemberId', $member->id)
             ->call('addMember');
 
@@ -115,7 +116,7 @@ class ProjectManagementTest extends TestCase
         $this->assertDatabaseHas('activity_logs', ['project_id' => $project->id, 'action_type' => 'project_member_added']);
         $this->assertDatabaseHas('notifications', ['recipient_id' => $member->id, 'type' => 'added_to_project']);
 
-        Livewire::actingAs($admin)->test(Show::class, ['project' => $project])
+        Livewire::actingAs($admin)->test(Anggota::class, ['project' => $project])
             ->call('removeMember', $member->id);
 
         $this->assertDatabaseMissing('project_members', ['project_id' => $project->id, 'user_id' => $member->id]);
@@ -130,7 +131,7 @@ class ProjectManagementTest extends TestCase
         $project = $this->project($admin);
         ProjectMember::create(['project_id' => $project->id, 'user_id' => $member->id]);
 
-        Livewire::actingAs($member)->test(Show::class, ['project' => $project])
+        Livewire::actingAs($member)->test(Anggota::class, ['project' => $project])
             ->set('newMemberId', $another->id)
             ->call('addMember')
             ->assertForbidden();
@@ -141,12 +142,12 @@ class ProjectManagementTest extends TestCase
         $admin = $this->admin();
         $project = $this->project($admin);
 
-        Livewire::actingAs($admin)->test(Show::class, ['project' => $project])
+        Livewire::actingAs($admin)->test(ProjectHeader::class, ['project' => $project])
             ->set('milestoneTitle', 'Setup dan Desain')
             ->set('milestoneTargetDate', '2026-07-10')
             ->call('addMilestone');
 
-        Livewire::actingAs($admin)->test(Show::class, ['project' => $project])
+        Livewire::actingAs($admin)->test(ProjectHeader::class, ['project' => $project])
             ->set('milestoneTitle', 'Development')
             ->set('milestoneTargetDate', '2026-07-20')
             ->call('addMilestone');
@@ -163,11 +164,11 @@ class ProjectManagementTest extends TestCase
         $admin = $this->admin();
         $project = $this->project($admin, 'active');
 
-        Livewire::actingAs($admin)->test(Show::class, ['project' => $project])->call('changeStatus', 'on_hold');
+        Livewire::actingAs($admin)->test(ProjectHeader::class, ['project' => $project])->call('changeStatus', 'on_hold');
         $project->refresh();
         $this->assertSame('on_hold', $project->status);
 
-        Livewire::actingAs($admin)->test(Show::class, ['project' => $project])->call('changeStatus', 'active');
+        Livewire::actingAs($admin)->test(ProjectHeader::class, ['project' => $project])->call('changeStatus', 'active');
         $project->refresh();
         $this->assertSame('active', $project->status);
     }
@@ -192,7 +193,7 @@ class ProjectManagementTest extends TestCase
             'created_by' => $admin->id,
         ]);
 
-        Livewire::actingAs($admin)->test(Show::class, ['project' => $project])
+        Livewire::actingAs($admin)->test(ProjectHeader::class, ['project' => $project])
             ->call('changeStatus', 'completed');
 
         $project->refresh();
@@ -204,7 +205,7 @@ class ProjectManagementTest extends TestCase
         $admin = $this->admin();
         $project = $this->project($admin, 'planning');
 
-        Livewire::actingAs($admin)->test(Show::class, ['project' => $project])
+        Livewire::actingAs($admin)->test(ProjectHeader::class, ['project' => $project])
             ->call('changeStatus', 'active');
 
         $project->refresh();
@@ -216,7 +217,7 @@ class ProjectManagementTest extends TestCase
         $admin = $this->admin();
         $project = $this->project($admin, 'archived');
 
-        Livewire::actingAs($admin)->test(Show::class, ['project' => $project])
+        Livewire::actingAs($admin)->test(ProjectHeader::class, ['project' => $project])
             ->call('changeStatus', 'active');
 
         $project->refresh();

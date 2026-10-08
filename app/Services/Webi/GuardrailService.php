@@ -7,38 +7,29 @@ use App\Models\Message;
 use Illuminate\Support\Collection;
 
 /**
- * Layer 2 backend guardrail validation (docs/spesifikasi-webi.md 5.2), the
- * "pertahanan lapis kedua" behind the system-prompt instructions (Layer 1,
- * SystemPromptBuilder). Logs to GuardrailFlag for admin monitoring (5.3),
- * matching the three flag_type values in the schema:
- * - output_validation: WEBI's own reply text is compared against evaluation_bank
- *   answer keys. This is the one that actually blocks/retries a reply.
- * - eval_detection: the user's incoming message resembles an evaluation
- *   question (paraphrase-tolerant). Logging only — Layer 1 is what makes WEBI
- *   actually refuse; this just records that it happened, for admin monitoring.
- * - domain_rejection: WEBI's reply matches one of the four fixed domain-refusal
- *   templates from docs/spesifikasi-webi.md 1.4.
+ * Layer 2 backend guardrail validation (spesifikasi-webi.md 5.2), the
+ * second line of defense behind system-prompt instructions (Layer 1,
+ * SystemPromptBuilder). Logs to GuardrailFlag for admin monitoring, three
+ * flag_type values:
+ * - output_validation: WEBI's reply compared against evaluation_bank
+ *   answer keys. The only type that actually blocks/retries a reply.
+ * - eval_detection: incoming message resembles an evaluation question
+ *   (paraphrase-tolerant). Logging only — Layer 1 makes WEBI refuse.
+ * - domain_rejection: reply matches one of the four fixed domain-refusal
+ *   templates.
  *
- * Similarity here is PHP's built-in similar_text() percentage, not literal
- * cosine similarity over embeddings — the doc says "cosine similarity ATAU
- * exact match" and this stack has no vector/embedding infrastructure (per
- * docs/tech-stack.md, that decision was deferred to 1.9 and never made). This
- * is flagged as a pragmatic substitute in the task 2.5 report, not a literal
- * implementation of the doc's wording.
+ * Similarity uses PHP's similar_text() percentage, not cosine similarity
+ * over embeddings — this stack has no vector/embedding infrastructure.
  */
 class GuardrailService
 {
     /**
-     * Cap on reply length for the verbatim-substring leak check below — found
-     * live (2026-07-04, while testing the recommendation-card feature) that
-     * without this cap, a long, clearly-explanatory reply that happens to
-     * mention its own unit's title/subject (which is often ALSO that unit's
-     * quiz answer, e.g. "Software Development") gets false-flagged as
-     * "leaking the answer" — triggering an unnecessary retry, which costs a
-     * full extra Gemini round-trip and doubles real timeout risk for a
-     * response that was completely fine. A genuine leaked answer tends to be
-     * a short reply that's mostly/only the answer itself, not a small phrase
-     * buried in several sentences of explanation.
+     * Cap on reply length for the verbatim-substring leak check below —
+     * without it, a long explanatory reply that happens to mention its
+     * own unit's title (often ALSO that unit's quiz answer) gets
+     * false-flagged and triggers an unnecessary retry (extra Gemini
+     * round-trip, doubled timeout risk). A genuine leaked answer is
+     * typically a short reply that's mostly just the answer itself.
      */
     private const MAX_LENGTH_FOR_SUBSTRING_LEAK_CHECK = 150;
 
@@ -154,7 +145,7 @@ class GuardrailService
     }
 
     /**
-     * Fallback used when even the one retry (docs/spesifikasi-webi.md 5.2)
+     * Fallback used when even the one retry (docs/v_2.0/archive/sumber-konsolidasi/spesifikasi-webi.md 5.2)
      * still leaks the answer key — the user must never receive a reply that
      * failed Layer 2 validation twice, so this replaces it outright rather
      * than sending it "best effort". Confirmed with the user (2026-07-04)

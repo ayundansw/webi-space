@@ -63,8 +63,33 @@ class Notification extends Model
             'task' => url('/eksekusi/tasks/'.$context->id),
             'unit' => url('/eksplorasi/unit/'.$context->id),
             'checkpoint' => url('/eksplorasi/checkpoint/'.$context->id),
-            'forum_thread' => url('/eksplorasi/forum/'.$context->id),
+            // Fase 7 Batch 4: a forum_thread with project_id set is a Forum
+            // Proyek thread (Eksekusi) — routes into that project's Forum
+            // tab with ?thread= to auto-open it (same query-param-driven
+            // auto-open pattern as Board's ?task=, Fase 7 Batch 1b).
+            //
+            // Forum General Eksekusi ("utang Fase 7"): project_id null is
+            // no longer automatically an Eksplorasi thread — Forum General
+            // threads ALSO have project_id null, distinguished only by
+            // `portal` now. project_id null + portal='execution' routes to
+            // the new standalone Forum General show page instead.
+            'forum_thread' => match (true) {
+                $context->project_id !== null => url('/eksekusi/projects/'.$context->project_id.'/forum?thread='.$context->id),
+                $context->portal === 'execution' => url('/eksekusi/forum/'.$context->id),
+                default => url('/eksplorasi/forum/'.$context->id),
+            },
             'module' => url('/eksplorasi/kurikulum'),
+            // Recipient-dependent: submission_received_alert (admin) and
+            // submission_assigned_to_reviewer (execution_member reviewer) go
+            // to the review page (gated by mode:execution,admin — both
+            // recipients always pass it). submission_approved/needs_revision
+            // go to the submitter (exploration_member), who would 403 on
+            // that same route, so they land on their own challenge page
+            // instead, where their submission history is visible.
+            'challenge_submission' => match ($this->type) {
+                'submission_received_alert', 'submission_assigned_to_reviewer' => url('/eksekusi/praktik/submissions/'.$context->id),
+                default => url('/eksplorasi/praktik/'.$context->challenge_id),
+            },
             default => null,
         };
     }

@@ -31,18 +31,21 @@ class Milestone extends Model
     }
 
     /**
-     * Derived, not stored (docs/struktur-eksekusi.md 3.5): percentage of this
-     * milestone's tasks that are `done`, always computed fresh.
+     * Derived, not stored (docs/v_2.0/archive/sumber-konsolidasi/struktur-eksekusi.md 3.5): percentage of this
+     * milestone's tasks that are `done`, always computed fresh. Fase 7
+     * Batch 2a: excludes subtasks (whereNull parent_task_id) — subtasks
+     * inherit their parent's milestone_id, so counting them here would
+     * double up progress against the same underlying work.
      */
     public function progressPercentage(): int
     {
-        $total = $this->tasks()->count();
+        $total = $this->tasks()->whereNull('parent_task_id')->count();
 
         if ($total === 0) {
             return 0;
         }
 
-        $done = $this->tasks()->where('status', 'done')->count();
+        $done = $this->tasks()->whereNull('parent_task_id')->where('status', 'done')->count();
 
         return (int) round($done / $total * 100);
     }

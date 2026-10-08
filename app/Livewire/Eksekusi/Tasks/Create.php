@@ -11,13 +11,14 @@ use Livewire\Attributes\Title;
 use Livewire\Component;
 
 /**
- * docs/struktur-eksekusi.md Tahap 4 says tasks are created by "Admin, atau
- * anggota eksekusi yang diberi wewenang oleh admin" — but there is no schema
- * field anywhere (ProjectMember has none) that tracks per-member authorization
- * to create tasks. Resolved: any ProjectMember of this project (plus admin)
- * can create tasks here. Flagged in the final report — a finer-grained
- * "authorized to create tasks" flag would need a schema change (out of scope
- * without explicit confirmation, per CLAUDE.md).
+ * struktur-eksekusi.md's "diberi wewenang oleh admin" authorization isn't
+ * tracked anywhere in the schema — resolved as: any ProjectMember of this
+ * project (plus admin) can create tasks. A finer-grained flag would need a
+ * schema change (tracked as an open gap in CLAUDE.md).
+ *
+ * Membership itself is enforced by the `project.member` route middleware,
+ * not here. The archived-project check below is a SEPARATE business rule
+ * (unrelated to membership), so it stays in this component.
  */
 #[Layout('components.layouts.app')]
 #[Title('Buat Task Baru')]
@@ -40,12 +41,6 @@ class Create extends Component
 
     public function mount(Project $project): void
     {
-        $user = Auth::user();
-
-        if ($user->role !== 'admin' && ! $project->members()->where('user_id', $user->id)->exists()) {
-            abort(403);
-        }
-
         abort_if($project->status === 'archived', 403);
 
         $this->project = $project;

@@ -13,6 +13,7 @@
 /.vscode
 /.zed
 /auth.json
+/database/seeders/data/akun_awal.php
 /node_modules
 /public/build
 /public/fonts-manifest.dev.json
@@ -26,3 +27,4 @@ _ide_helper.php
 Homestead.json
 Homestead.yaml
 Thumbs.db
+*.sql

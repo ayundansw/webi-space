@@ -78,6 +78,45 @@ class TaskService
         return $task;
     }
 
+    /**
+     * Fase 7 Batch 2a: subtask is a plain Task row with parent_task_id set
+     * (docs/v_2.0/archive/sumber-konsolidasi/Rancangan_Modul_Manajemen_Proyek_v2.md §Subtask), not a
+     * separate table. Always inherits the parent's project_id/milestone_id
+     * — subtask form is deliberately lighter (title, assignee, deadline
+     * opsional only, no separate milestone picker), and milestone_id stays
+     * NOT NULL in the schema (no migration for that here). "Deadline
+     * opsional" is honored at the form level by defaulting to the parent's
+     * own deadline when omitted, not by making the column nullable.
+     */
+    public function createSubtask(Task $parent, User $creator, array $data): Task
+    {
+        $subtask = Task::create([
+            'project_id' => $parent->project_id,
+            'milestone_id' => $parent->milestone_id,
+            'parent_task_id' => $parent->id,
+            'title' => $data['title'],
+            'description' => null,
+            'status' => 'todo',
+            'priority' => 'medium',
+            'deadline' => $data['deadline'] ?? $parent->deadline,
+            'created_by' => $creator->id,
+        ]);
+
+        $this->logger->log(
+            $parent->project,
+            $subtask,
+            $creator,
+            'task_created',
+            "Subtask '{$subtask->title}' ditambahkan ke task '{$parent->title}' oleh {$creator->name}",
+        );
+
+        if (! empty($data['assignee_id'])) {
+            $this->assign($subtask, User::findOrFail($data['assignee_id']), $creator);
+        }
+
+        return $subtask;
+    }
+
     public function assign(Task $task, User $assignee, User $assignedBy): TaskAssignment
     {
         $assignment = TaskAssignment::create([
@@ -255,7 +294,7 @@ class TaskService
             ->filter(fn (User $u) => $u->id !== $author->id);
 
         /*
-         * Lampiran B (docs/struktur-eksekusi.md) defines two notification types
+         * Lampiran B (docs/v_2.0/archive/sumber-konsolidasi/struktur-eksekusi.md) defines two notification types
          * that both fire on the same "comment added" event: `comment_from_admin`
          * (trigger: admin comments) and `comment_on_my_task` (trigger: "siapapun"
          * comments — which already includes admin). Sending both for a single
@@ -317,7 +356,7 @@ class TaskService
     }
 
     /**
-     * docs/struktur-eksekusi.md 3.10: Attachment can also be an external link
+     * docs/v_2.0/archive/sumber-konsolidasi/struktur-eksekusi.md 3.10: Attachment can also be an external link
      * instead of a file upload (three variants total: file, link, text) —
      * file_url holds the URL, file_name holds the label, file_type is
      * literally "link", file_size is null.

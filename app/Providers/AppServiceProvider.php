@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use App\Models\ChallengeStep;
+use App\Models\ChallengeSubmission;
 use App\Models\Checkpoint;
 use App\Models\ForumThread;
 use App\Models\Module;
@@ -33,6 +35,8 @@ class AppServiceProvider extends ServiceProvider
             'checkpoint' => Checkpoint::class,
             'module' => Module::class,
             'forum_thread' => ForumThread::class,
+            'challenge_submission' => ChallengeSubmission::class,
+            'challenge_step' => ChallengeStep::class,
         ]);
     }
 }

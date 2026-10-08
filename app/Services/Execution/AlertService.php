@@ -12,10 +12,18 @@ use App\Models\User;
 use Illuminate\Support\Collection;
 
 /**
- * Computes the six automatic monitoring flags from docs/struktur-eksekusi.md
+ * Computes the six automatic monitoring flags from docs/v_2.0/archive/sumber-konsolidasi/struktur-eksekusi.md
  * Bagian 5.2. Business rule 5.14: on_hold projects suppress all deadline
  * notifications and alert flags for that project — every method here
  * excludes tasks/milestones belonging to on_hold projects.
+ *
+ * Fase 7 Batch 2a audit (RECON_fase7_manajemen_proyek.md): every Task query
+ * below is deliberately NOT filtered to whereNull('parent_task_id') —
+ * subtasks have their own real deadline/assignee, so an overdue, stalled,
+ * or soon-due subtask needs to surface here exactly like a task besar
+ * would. Confirmed decision (2026-07-12), not an oversight. Contrast with
+ * Project/Milestone::progressPercentage() and the Kanban board, which
+ * exclude subtasks because those are task-besar rollup/display metrics.
  */
 class AlertService
 {
@@ -23,17 +31,26 @@ class AlertService
         private Notifier $notifier,
     ) {}
 
-    public function overdueTasks(): Collection
+    /**
+     * @param  ?Collection  $projectIds  2.2.3 (dashboard Eksekusi): when given,
+     *      restricts alerts to these projects only — used by the execution
+     *      member's own dashboard so it only ever sees alerts for projects it
+     *      belongs to. Left null everywhere else (admin dashboard, scheduled
+     *      `notifyNewAlerts()`), which preserves the exact prior "all projects"
+     *      behavior.
+     */
+    public function overdueTasks(?Collection $projectIds = null): Collection
     {
         return Task::query()
             ->whereHas('project', fn ($q) => $q->where('status', '!=', 'on_hold'))
             ->where('status', '!=', 'done')
             ->where('deadline', '<', now()->toDateString())
+            ->when($projectIds, fn ($q) => $q->whereIn('project_id', $projectIds))
             ->with(['project', 'assignments.user'])
             ->get();
     }
 
-    public function dueSoonTasks(): Collection
+    public function dueSoonTasks(?Collection $projectIds = null): Collection
     {
         $threshold = now()->addDays(config('execution.due_soon_days'))->toDateString();
 
@@ -41,17 +58,19 @@ class AlertService
             ->whereHas('project', fn ($q) => $q->where('status', '!=', 'on_hold'))
             ->where('status', '!=', 'done')
             ->whereBetween('deadline', [now()->toDateString(), $threshold])
+            ->when($projectIds, fn ($q) => $q->whereIn('project_id', $projectIds))
             ->with(['project', 'assignments.user'])
             ->get();
     }
 
-    public function stalledTasks(): Collection
+    public function stalledTasks(?Collection $projectIds = null): Collection
     {
         $cutoff = now()->subDays(config('execution.stalled_days'));
 
         return Task::query()
             ->whereHas('project', fn ($q) => $q->where('status', '!=', 'on_hold'))
             ->where('status', 'in_progress')
+            ->when($projectIds, fn ($q) => $q->whereIn('project_id', $projectIds))
             ->with(['project', 'assignments.user'])
             ->get()
             ->filter(function (Task $task) use ($cutoff) {
@@ -85,22 +104,24 @@ class AlertService
             ->values();
     }
 
-    public function milestonesAtRisk(): Collection
+    public function milestonesAtRisk(?Collection $projectIds = null): Collection
     {
         return Milestone::query()
             ->whereHas('project', fn ($q) => $q->where('status', '!=', 'on_hold'))
             ->where('target_date', '<', now()->toDateString())
+            ->when($projectIds, fn ($q) => $q->whereIn('project_id', $projectIds))
             ->with('project')
             ->get()
             ->filter(fn (Milestone $milestone) => $milestone->tasks()->where('status', '!=', 'done')->exists())
             ->values();
     }
 
-    public function idleProjects(): Collection
+    public function idleProjects(?Collection $projectIds = null): Collection
     {
         $cutoff = now()->subDays(config('execution.project_idle_days'));
 
         return Project::where('status', 'active')
+            ->when($projectIds, fn ($q) => $q->whereIn('id', $projectIds))
             ->get()
             ->filter(function (Project $project) use ($cutoff) {
                 $lastLog = ActivityLog::where('project_id', $project->id)->max('created_at');

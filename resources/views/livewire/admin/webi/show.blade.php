@@ -1,6 +1,14 @@
+@push('breadcrumb-actions')
+    <a href="{{ url('/admin/webi') }}" class="inline-flex shrink-0 items-center gap-1.5 rounded-control border border-muted/40 px-4 py-2 text-sm font-medium text-ink shadow-warm-xs hover:border-ink hover:bg-surface-alt">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+            <path d="M19 12H5" /><path d="m12 19-7-7 7-7" />
+        </svg>
+        Kembali
+    </a>
+@endpush
+
 <div>
-    <a href="{{ url('/admin/webi') }}" class="text-sm text-muted hover:text-ink">&larr; Kembali</a>
-    <h1 class="mt-2 font-display text-2xl font-bold text-ink">Log Percakapan: {{ $user->name }}</h1>
+    <h1 class="font-display text-2xl font-bold text-ink">Log Percakapan: {{ $user->name }}</h1>
 
     <div class="mt-6 space-y-3">
         @forelse ($messages as $message)

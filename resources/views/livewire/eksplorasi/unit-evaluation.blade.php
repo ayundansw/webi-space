@@ -1,6 +1,29 @@
 <div>
-    @if ($mode === 'result')
+    {{--
+        Fase 8 Batch 3: execution_member mode baca tidak pernah punya
+        EvaluationSubmission/UserExplorationProgress -- menampilkan form
+        kuis/essay/markAsRead ke mereka cuma akan berakhir 403 saat submit
+        (guard di submitQuiz()/submitFreeText()/markAsRead()), jadi
+        seluruh bagian interaktif diganti notice sederhana alih-alih
+        dirender lalu ditolak di ujung. mode selalu 'form' untuk mereka
+        (tidak pernah ada submission tersimpan), jadi cukup satu guard di
+        paling luar.
+    --}}
+    @if ($isReadOnlyExploration)
+        <div class="rounded-lg border border-muted/25 bg-surface/60 p-4 text-sm text-muted">
+            Evaluasi/kuis unit ini tidak tersedia dalam mode baca-saja Eksplorasi.
+        </div>
+    @elseif ($mode === 'result')
         <div class="rounded-xl border border-accent/40 bg-accent-soft/30 p-6">
+            @if ($isMastered)
+                <div class="mb-3 inline-flex items-center gap-1.5 rounded-full bg-ink px-3 py-1 text-xs font-medium text-accent">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5">
+                        <path d="m5 13 4 4 10-10" />
+                    </svg>
+                    Sudah Dikuasai
+                </div>
+            @endif
+
             <p class="text-sm font-medium text-ink">
                 Selamat! Kamu mendapatkan {{ $unit->point_value }} poin karena menuntaskan unit ini. Terus jaga semangatmu!
             </p>
@@ -50,7 +73,7 @@
                                 <p class="text-sm text-ink">{{ $detail['question'] }}</p>
                                 <p class="mt-1 text-sm {{ $detail['is_correct'] ? 'text-ink' : 'text-muted' }}">
                                     Jawabanmu: <span class="font-medium">{{ $detail['selected'] }}</span>
-                                    {{ $detail['is_correct'] ? '— tepat!' : '— belum tepat' }}
+                                    {{ $detail['is_correct'] ? '(tepat!)' : '(belum tepat)' }}
                                 </p>
                                 @unless ($detail['is_correct'])
                                     <p class="mt-1 text-sm text-ink">Jawaban yang benar: <span class="font-medium">{{ $detail['correct_answer'] }}</span></p>
@@ -62,19 +85,28 @@
 
                 @if ($resultIsCorrect === false)
                     <p class="mt-3 text-sm text-muted">
-                        Ada yang belum tepat, tapi tidak apa-apa &mdash; poinmu tetap tercatat. Mau coba lagi supaya makin paham?
+                        Ada yang belum tepat, tapi tidak apa-apa, poinmu tetap tercatat. Mau coba lagi supaya makin paham?
+                    </p>
+                @elseif ($resultIsCorrect === true)
+                    <p class="mt-3 text-sm text-muted">
+                        Semua jawabanmu tepat! Boleh latihan lagi kapan saja kalau mau, status "Sudah Dikuasai" tidak akan hilang.
                     </p>
                 @endif
             @endif
 
             <div class="mt-4 flex flex-wrap gap-3">
-                @if ($resultIsCorrect === false)
+                {{-- 2.2.3 v2.0: retry is always available for quiz types (resultIsCorrect
+                     !== null), whether the last attempt was right or wrong — mastery
+                     already earned never gets taken away by a later wrong retry
+                     (see UnitEvaluation::refreshMasteryStatus()). Essay/practice
+                     (resultIsCorrect stays null) remain one-shot, unchanged. --}}
+                @if ($resultIsCorrect !== null)
                     <button
                         type="button"
                         wire:click="retry"
                         class="inline-block rounded-lg border border-ink px-4 py-2 text-sm font-medium text-ink hover:bg-ink hover:text-white"
                     >
-                        Coba Lagi
+                        {{ $resultIsCorrect ? 'Latihan Lagi' : 'Coba Lagi' }}
                     </button>
                 @endif
 
@@ -184,6 +216,6 @@
             Tandai Sudah Selesai Dibaca
         </button>
     @else
-        <p class="text-sm text-muted">Tipe evaluasi ini ({{ $unit->evaluation_type }}) belum didukung di versi ini &mdash; menyusul saat konten kurikulum penuh dibangun.</p>
+        <p class="text-sm text-muted">Tipe evaluasi ini ({{ $unit->evaluation_type }}) belum didukung di versi ini, menyusul saat konten kurikulum penuh dibangun.</p>
     @endif
 </div>

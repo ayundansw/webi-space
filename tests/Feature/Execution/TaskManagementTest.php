@@ -280,6 +280,117 @@ class TaskManagementTest extends TestCase
             ->assertSee('Done (1)');
     }
 
+    /**
+     * 2.2.2b (Kanban drag-and-drop): the drag-drop drop handler calls
+     * Board::changeStatus($taskId, $newStatus) — the exact same wrapper the
+     * board's own status buttons already call, which then delegates to
+     * TaskService::changeStatus() (identical to Tasks\Show's wrapper). This
+     * exercises that entry point directly, since prior to this batch only
+     * Show::changeStatus() had test coverage — Board's own wrapper was
+     * never invoked in a test, just rendered.
+     */
+    public function test_board_change_status_allows_legal_transition_and_records_side_effects(): void
+    {
+        $admin = $this->admin();
+        $member = $this->executionMember();
+        [$project, $milestone] = $this->projectWithMilestone($admin, 'active');
+        ProjectMember::create(['project_id' => $project->id, 'user_id' => $member->id]);
+
+        $task = Task::create([
+            'project_id' => $project->id,
+            'milestone_id' => $milestone->id,
+            'title' => 'Buat halaman utama',
+            'status' => 'todo',
+            'priority' => 'medium',
+            'deadline' => '2026-07-20',
+            'created_by' => $admin->id,
+        ]);
+        \App\Models\TaskAssignment::create(['task_id' => $task->id, 'user_id' => $member->id, 'assigned_by' => $admin->id]);
+
+        Livewire::actingAs($member)->test(Board::class, ['project' => $project])
+            ->call('changeStatus', $task->id, 'in_progress');
+
+        $task->refresh();
+        $this->assertSame('in_progress', $task->status);
+        $this->assertDatabaseHas('activity_logs', [
+            'project_id' => $project->id,
+            'task_id' => $task->id,
+            'action_type' => 'task_status_changed',
+        ]);
+
+        // The same board wrapper also submits it for review — admin should
+        // get the task_status_to_review notification, same as via Show.
+        Livewire::actingAs($member)->test(Board::class, ['project' => $project])
+            ->call('changeStatus', $task->id, 'in_review');
+
+        $task->refresh();
+        $this->assertSame('in_review', $task->status);
+        $this->assertDatabaseHas('notifications', ['recipient_id' => $admin->id, 'type' => 'task_status_to_review']);
+    }
+
+    public function test_board_change_status_rejects_illegal_transition(): void
+    {
+        $admin = $this->admin();
+        $member = $this->executionMember();
+        [$project, $milestone] = $this->projectWithMilestone($admin, 'active');
+        ProjectMember::create(['project_id' => $project->id, 'user_id' => $member->id]);
+
+        $task = Task::create([
+            'project_id' => $project->id,
+            'milestone_id' => $milestone->id,
+            'title' => 'Buat halaman utama',
+            'status' => 'todo',
+            'priority' => 'medium',
+            'deadline' => '2026-07-20',
+            'created_by' => $admin->id,
+        ]);
+        \App\Models\TaskAssignment::create(['task_id' => $task->id, 'user_id' => $member->id, 'assigned_by' => $admin->id]);
+
+        // Dragged straight from todo to done, skipping in_progress/in_review —
+        // not in TaskService::ALLOWED_TRANSITIONS, must be rejected.
+        Livewire::actingAs($member)->test(Board::class, ['project' => $project])
+            ->call('changeStatus', $task->id, 'done')
+            ->assertHasErrors('status');
+
+        $task->refresh();
+        $this->assertSame('todo', $task->status);
+    }
+
+    public function test_board_change_status_rejects_role_restricted_transition(): void
+    {
+        $admin = $this->admin();
+        $member = $this->executionMember();
+        [$project, $milestone] = $this->projectWithMilestone($admin, 'active');
+        ProjectMember::create(['project_id' => $project->id, 'user_id' => $member->id]);
+
+        $task = Task::create([
+            'project_id' => $project->id,
+            'milestone_id' => $milestone->id,
+            'title' => 'Buat halaman utama',
+            'status' => 'in_review',
+            'priority' => 'medium',
+            'deadline' => '2026-07-20',
+            'created_by' => $admin->id,
+        ]);
+        \App\Models\TaskAssignment::create(['task_id' => $task->id, 'user_id' => $member->id, 'assigned_by' => $admin->id]);
+
+        // Legal transition on paper (in_review -> done), but done is
+        // admin-only — a member dragging it there must be rejected.
+        Livewire::actingAs($member)->test(Board::class, ['project' => $project])
+            ->call('changeStatus', $task->id, 'done')
+            ->assertHasErrors('status');
+
+        $task->refresh();
+        $this->assertSame('in_review', $task->status);
+
+        // Same drop, performed by admin, must succeed via the same wrapper.
+        Livewire::actingAs($admin)->test(Board::class, ['project' => $project])
+            ->call('changeStatus', $task->id, 'done');
+
+        $task->refresh();
+        $this->assertSame('done', $task->status);
+    }
+
     public function test_admin_can_delete_task_but_member_cannot(): void
     {
         $admin = $this->admin();

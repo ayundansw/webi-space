@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable(['module_id', 'title', 'url', 'source_name'])]
+#[Fillable(['module_id', 'created_by', 'title', 'url', 'description', 'source_name'])]
 class LearningResource extends Model
 {
     use HasUuids;
@@ -15,5 +15,10 @@ class LearningResource extends Model
     public function module(): BelongsTo
     {
         return $this->belongsTo(Module::class);
+    }
+
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
     }
 }

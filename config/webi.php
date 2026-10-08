@@ -7,8 +7,8 @@ return [
     | Configurable Parameters
     |--------------------------------------------------------------------------
     |
-    | Defaults from docs/PRD.md "Lampiran A: Parameter WEBI" and
-    | docs/spesifikasi-webi.md, all explicitly marked configurable there.
+    | Defaults from docs/v_2.0/archive/sumber-konsolidasi/PRD.md "Lampiran A: Parameter WEBI" and
+    | docs/v_2.0/archive/sumber-konsolidasi/spesifikasi-webi.md, all explicitly marked configurable there.
     |
     */
 

@@ -55,18 +55,35 @@ class Project extends Model
         return $this->hasMany(ActivityLog::class);
     }
 
+    public function calendarEvents(): HasMany
+    {
+        return $this->hasMany(CalendarEvent::class);
+    }
+
     /**
-     * Derived, not stored: percentage of this project's tasks that are `done`.
+     * Fase 7 Batch 4: "Forum Proyek" — ForumThread rows scoped to this
+     * project (project_id set). See ForumThread's own docblock.
+     */
+    public function forumThreads(): HasMany
+    {
+        return $this->hasMany(ForumThread::class);
+    }
+
+    /**
+     * Derived, not stored: percentage of this project's tasks that are
+     * `done`. Fase 7 Batch 2a: excludes subtasks (whereNull parent_task_id)
+     * — this is a task-besar rollup metric, same audited decision as
+     * Milestone::progressPercentage() and the Kanban board.
      */
     public function progressPercentage(): int
     {
-        $total = $this->tasks()->count();
+        $total = $this->tasks()->whereNull('parent_task_id')->count();
 
         if ($total === 0) {
             return 0;
         }
 
-        $done = $this->tasks()->where('status', 'done')->count();
+        $done = $this->tasks()->whereNull('parent_task_id')->where('status', 'done')->count();
 
         return (int) round($done / $total * 100);
     }

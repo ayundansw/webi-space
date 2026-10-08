@@ -55,6 +55,15 @@ return [
             'unix_socket' => env('DB_SOCKET', ''),
             'charset' => env('DB_CHARSET', 'utf8mb4'),
             'collation' => env('DB_COLLATION', 'utf8mb4_unicode_ci'),
+            // Numeric offset, not 'Asia/Jakarta' — MySQL's named-timezone
+            // table (mysql.time_zone_name) is often empty on shared hosting,
+            // but a numeric offset always works with no extra setup. WIB has
+            // no DST, so the offset never needs to change across the year.
+            // This makes the connection's own session time_zone correct
+            // regardless of what timezone the DB server's OS happens to be
+            // in (see CLAUDE.md — dev machine's OS coincidentally matched
+            // WIB already, masking this gap; production is not guaranteed to).
+            'timezone' => env('DB_TIMEZONE', '+07:00'),
             'prefix' => '',
             'prefix_indexes' => true,
             'strict' => true,

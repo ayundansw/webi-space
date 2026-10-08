@@ -14,6 +14,11 @@
             <p class="text-sm font-medium text-ink">Checkpoint ini sudah kamu tuntaskan. Keren!</p>
             <p class="mt-1 text-sm text-muted">Kamu dapat {{ $completion->points_awarded }} poin bonus dari checkpoint ini.</p>
         </div>
+    @elseif ($isReadOnlyExploration)
+        {{-- Fase 8 Batch 3: mode baca Eksplorasi -- checkpoint adalah progres, tidak bisa dituntaskan. --}}
+        <div class="mt-6 rounded-lg border border-muted/25 bg-surface/60 p-4 text-sm text-muted">
+            Checkpoint tidak bisa dituntaskan dalam mode baca-saja Eksplorasi.
+        </div>
     @else
         <form wire:submit="submit" class="mt-6 space-y-8">
             <div>

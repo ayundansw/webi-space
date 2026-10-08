@@ -22,8 +22,8 @@ class Create extends Component
     {
         $validated = $this->validate([
             'title' => ['required', 'string', 'max:255'],
-            'description' => ['required', 'string'],
-            'purpose' => ['required', 'string'],
+            'description' => ['nullable', 'string'],
+            'purpose' => ['nullable', 'string'],
         ]);
 
         $service->propose(Auth::user(), $validated);

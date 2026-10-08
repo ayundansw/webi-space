@@ -12,7 +12,7 @@ class ProjectService
 {
     /**
      * Manual, admin-triggered transitions only. `planning` > `active` is
-     * deliberately absent here — docs/struktur-eksekusi.md says that transition
+     * deliberately absent here — docs/v_2.0/archive/sumber-konsolidasi/struktur-eksekusi.md says that transition
      * happens automatically when the first Task is created (see TaskService),
      * not as an admin action.
      */
@@ -127,6 +127,10 @@ class ProjectService
         }
 
         if ($newStatus === 'completed') {
+            // Fase 7 Batch 2a audit: deliberately NOT filtered to
+            // whereNull('parent_task_id') — an outstanding subtask is real
+            // unfinished work, so it should block marking the project
+            // completed exactly like an outstanding task besar would.
             $incomplete = $project->tasks()->where('status', '!=', 'done')->exists();
 
             if ($incomplete) {

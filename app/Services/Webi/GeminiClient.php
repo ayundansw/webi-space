@@ -9,7 +9,7 @@ use Throwable;
 /**
  * Thin wrapper around Google Gemini's generateContent REST endpoint.
  *
- * docs/tech-stack.md 3: calls happen ONLY from this backend service via
+ * docs/v_2.0/archive/sumber-konsolidasi/tech-stack.md 3: calls happen ONLY from this backend service via
  * Laravel's HTTP client (Guzzle-backed) — never from browser JS, so the API
  * key is never exposed to the client.
  */

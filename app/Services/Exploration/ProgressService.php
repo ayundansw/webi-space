@@ -8,11 +8,12 @@ use App\Models\Unit;
 use App\Models\User;
 use App\Models\UserExplorationProgress;
 use App\Models\UserUnitProgress;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
 class ProgressService
 {
-    public function __construct(private Notifier $notifier) {}
+    public function __construct(private Notifier $notifier, private PointService $pointService) {}
 
     public function ensureProgress(User $user): UserExplorationProgress
     {
@@ -24,6 +25,25 @@ class ProgressService
                 'total_points' => 0,
             ]
         );
+    }
+
+    /**
+     * Fase 8 Batch 3: for an execution_member in read-only Eksplorasi mode
+     * (§2.2.A — "TIDAK ada UserExplorationProgress yang dibuat/diubah").
+     * Same default shape ensureProgress() would create, but NEVER saved —
+     * callers that would otherwise call ensureProgress() (PetaKurikulum,
+     * UnitShow) use this instead when User::isReadOnlyExploration() is
+     * true, so the view always has a UserExplorationProgress-shaped object
+     * to read from without ever persisting a row for a user who was only
+     * ever reading, never participating.
+     */
+    public function blankProgress(): UserExplorationProgress
+    {
+        return new UserExplorationProgress([
+            'current_level' => 1,
+            'level_name' => config('exploration.level_names')[1],
+            'total_points' => 0,
+        ]);
     }
 
     public function moduleStatus(Module $module, User $user): string
@@ -147,7 +167,7 @@ class ProgressService
         // Idempotent: a quiz retry re-calls this after the unit is already completed,
         // and must not double-award points earned on the first attempt.
         if (! $alreadyCompleted) {
-            $this->awardPoints($user, $unit->point_value);
+            $this->pointService->award($user, $unit->point_value);
             $this->notifyNewlyUnlockedUnits($user, $unit);
         }
 
@@ -167,7 +187,7 @@ class ProgressService
             'points_awarded' => 25,
         ]);
 
-        $this->awardPoints($user, 25);
+        $this->pointService->award($user, 25);
         $this->refreshCurrentUnit($user);
 
         $this->notifier->send(
@@ -179,29 +199,6 @@ class ProgressService
         );
 
         return $completion;
-    }
-
-    public function awardPoints(User $user, int $points): UserExplorationProgress
-    {
-        $progress = $this->ensureProgress($user);
-        $levelBefore = $progress->current_level;
-
-        $progress->total_points += $points;
-        [$level, $name] = $this->resolveLevel($progress->total_points);
-        $progress->current_level = $level;
-        $progress->level_name = $name;
-        $progress->save();
-
-        if ($level > $levelBefore) {
-            $this->notifier->send(
-                $user,
-                'level_up',
-                'Naik level!',
-                "Keren! Kamu naik ke Level {$level}: {$name}.",
-            );
-        }
-
-        return $progress;
     }
 
     /**
@@ -233,20 +230,6 @@ class ProgressService
     {
         $next = $this->nextUnitFor($user);
         $this->ensureProgress($user)->update(['current_unit_id' => $next?->id]);
-    }
-
-    protected function resolveLevel(int $totalPoints): array
-    {
-        $thresholds = config('exploration.level_thresholds');
-        $level = 1;
-
-        foreach ($thresholds as $lvl => $minPoints) {
-            if ($totalPoints >= $minPoints) {
-                $level = $lvl;
-            }
-        }
-
-        return [$level, config('exploration.level_names')[$level]];
     }
 
     public function overallProgressPercentage(User $user): int
@@ -301,5 +284,130 @@ class ProgressService
             ->sortByDesc('timestamp')
             ->take($limit)
             ->values();
+    }
+
+    /**
+     * Per-day activity counts for the "Kalender Aktivitas" heatmap — grouped
+     * by calendar day via SQL to avoid loading every row for a multi-month
+     * window.
+     *
+     * @return array<string, int> keyed by 'Y-m-d', summed across both
+     *     tables when a day has both a unit and a checkpoint completion.
+     *     Days with zero activity are simply absent from the array — the
+     *     caller fills gaps when building the display grid.
+     */
+    public function activityHeatmap(User $user, int $days): array
+    {
+        $since = now()->subDays($days - 1)->startOfDay();
+
+        $unitDays = UserUnitProgress::where('user_id', $user->id)
+            ->where('status', 'completed')
+            ->where('completed_at', '>=', $since)
+            ->selectRaw('DATE(completed_at) as day, COUNT(*) as total')
+            ->groupBy('day')
+            ->pluck('total', 'day');
+
+        $checkpointDays = CheckpointCompletion::where('user_id', $user->id)
+            ->where('completed_at', '>=', $since)
+            ->selectRaw('DATE(completed_at) as day, COUNT(*) as total')
+            ->groupBy('day')
+            ->pluck('total', 'day');
+
+        $counts = [];
+
+        foreach ([$unitDays, $checkpointDays] as $dayCounts) {
+            foreach ($dayCounts as $day => $total) {
+                $counts[$day] = ($counts[$day] ?? 0) + (int) $total;
+            }
+        }
+
+        return $counts;
+    }
+
+    /**
+     * Member-facing leaderboard: Top 5 by total_points, tie-broken by
+     * whoever reached that total FIRST (deterministic, never a shared rank).
+     *
+     * Tie-break timestamp is deliberately NOT UserExplorationProgress.updated_at
+     * (also bumped by recordUnitOpened() with zero points earned). The real
+     * point-earning events are UserUnitProgress.completed_at and
+     * CheckpointCompletion.completed_at; the most recent of those is when
+     * the current total_points was reached.
+     *
+     * SECURITY: computes ranking over ALL exploration_members, but only the
+     * top 5 rows plus the requesting user's own rank/points are ever
+     * returned — every other member's data stays local to this method and
+     * must never be exposed via a public Livewire property.
+     *
+     * @return array{
+     *     top5: array<int, array{rank: int, name: string, points: int, is_self: bool}>,
+     *     self: array{rank: int, points: int}|null,
+     * }
+     */
+    public function memberLeaderboard(User $currentUser): array
+    {
+        $lastEarnedAt = function (string $userId): ?Carbon {
+            $unitTimestamp = UserUnitProgress::where('user_id', $userId)
+                ->where('status', 'completed')
+                ->max('completed_at');
+
+            $checkpointTimestamp = CheckpointCompletion::where('user_id', $userId)->max('completed_at');
+
+            return collect([$unitTimestamp, $checkpointTimestamp])
+                ->filter()
+                ->map(fn (string $timestamp) => Carbon::parse($timestamp))
+                ->max();
+        };
+
+        $ranked = User::where('role', 'exploration_member')
+            ->get()
+            ->map(fn (User $member) => [
+                'user_id' => $member->id,
+                'name' => $member->name,
+                'points' => $this->ensureProgress($member)->total_points,
+                'reached_at' => $lastEarnedAt($member->id),
+            ])
+            ->sort(function (array $a, array $b) {
+                if ($a['points'] !== $b['points']) {
+                    return $b['points'] <=> $a['points'];
+                }
+
+                // Nobody has earned anything yet on either side — order doesn't matter.
+                if ($a['reached_at'] === null && $b['reached_at'] === null) {
+                    return 0;
+                }
+
+                // A member with points but no recorded completion timestamp
+                // (shouldn't normally happen) sorts after one that has one.
+                if ($a['reached_at'] === null) {
+                    return 1;
+                }
+
+                if ($b['reached_at'] === null) {
+                    return -1;
+                }
+
+                return $a['reached_at'] <=> $b['reached_at'];
+            })
+            ->values();
+
+        $top5 = $ranked->take(5)->values()->map(fn (array $row, int $index) => [
+            'rank' => $index + 1,
+            'name' => $row['name'],
+            'points' => $row['points'],
+            'is_self' => $row['user_id'] === $currentUser->id,
+        ])->all();
+
+        $selfIndex = $ranked->search(fn (array $row) => $row['user_id'] === $currentUser->id);
+
+        $self = null;
+        if ($selfIndex !== false && $selfIndex >= 5) {
+            $self = [
+                'rank' => $selfIndex + 1,
+                'points' => $ranked[$selfIndex]['points'],
+            ];
+        }
+
+        return ['top5' => $top5, 'self' => $self];
     }
 }

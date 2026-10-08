@@ -14,9 +14,9 @@ use Tests\TestCase;
 
 /**
  * Task 2.7 Batch 2 finding: `quiz_matching` and `quiz_ordering` units — used
- * throughout the REAL curriculum (CurriculumSeeder), including Unit 1.2 and
- * 1.3, the second and third unit in the entire curriculum — had NO form UI at
- * all in unit-evaluation.blade.php. The outer @elseif only matched
+ * throughout the REAL curriculum (CurriculumSeeder; in the current v2.0
+ * curriculum, e.g. Unit 2.1/4.1 for matching and Unit 4.2 for ordering) —
+ * had NO form UI at all in unit-evaluation.blade.php. The outer @elseif only matched
  * 'quiz_multiple_choice', so any unit of these two types fell through to the
  * "Tipe evaluasi ini belum didukung" message with no way to answer, and even
  * the server-side `submitQuiz()` validation demanded a `string` answer
@@ -47,7 +47,7 @@ class MatchingAndOrderingEvaluationTest extends TestCase
     public function test_matching_question_with_all_correct_pairs_is_graded_correct(): void
     {
         $user = $this->member();
-        $unit = Unit::where('title', 'Peran-Peran dalam Tim Development')->firstOrFail();
+        $unit = Unit::where('title', 'Struktur Peran dalam Tim Software')->firstOrFail();
         $question = $unit->evaluations()->firstOrFail();
 
         $component = Livewire::actingAs($user)->test(UnitEvaluation::class, ['unit' => $unit]);
@@ -67,7 +67,7 @@ class MatchingAndOrderingEvaluationTest extends TestCase
     public function test_matching_pair_order_does_not_affect_correctness(): void
     {
         $user = $this->member();
-        $unit = Unit::where('title', 'Peran-Peran dalam Tim Development')->firstOrFail();
+        $unit = Unit::where('title', 'Struktur Peran dalam Tim Software')->firstOrFail();
         $question = $unit->evaluations()->firstOrFail();
 
         // submit the correct pairs but in reverse key order — must still grade correct
@@ -83,7 +83,7 @@ class MatchingAndOrderingEvaluationTest extends TestCase
     public function test_matching_question_with_one_wrong_pair_is_graded_incorrect_but_still_awards_points(): void
     {
         $user = $this->member();
-        $unit = Unit::where('title', 'Peran-Peran dalam Tim Development')->firstOrFail();
+        $unit = Unit::where('title', 'Struktur Peran dalam Tim Software')->firstOrFail();
         $question = $unit->evaluations()->firstOrFail();
 
         $component = Livewire::actingAs($user)->test(UnitEvaluation::class, ['unit' => $unit]);
@@ -104,7 +104,7 @@ class MatchingAndOrderingEvaluationTest extends TestCase
     public function test_ordering_question_move_up_and_down_reorders_items(): void
     {
         $user = $this->member();
-        $unit = Unit::where('title', 'Siklus Hidup Pengembangan Software (SDLC)')->firstOrFail();
+        $unit = Unit::where('title', 'Mekanisme Ketergantungan Antar Peran dalam Siklus Proyek')->firstOrFail();
         $question = $unit->evaluations()->firstOrFail();
 
         $component = Livewire::actingAs($user)->test(UnitEvaluation::class, ['unit' => $unit]);
@@ -118,19 +118,27 @@ class MatchingAndOrderingEvaluationTest extends TestCase
     public function test_ordering_question_correct_sequence_is_graded_correct(): void
     {
         $user = $this->member();
-        $unit = Unit::where('title', 'Siklus Hidup Pengembangan Software (SDLC)')->firstOrFail();
+        $unit = Unit::where('title', 'Mekanisme Ketergantungan Antar Peran dalam Siklus Proyek')->firstOrFail();
         $question = $unit->evaluations()->firstOrFail();
 
-        // component initializes quizAnswers to the seeded (already-correct) order by default
-        Livewire::actingAs($user)->test(UnitEvaluation::class, ['unit' => $unit])
-            ->call('submitQuiz')
-            ->assertSet('resultIsCorrect', true);
+        // v2.0: unlike the old fixture this test originally relied on, this
+        // unit's seeded `options` (display order) is deliberately DIFFERENT
+        // from `correct_answer` (options === correct_answer was flagged and
+        // fixed elsewhere in this project as a data anti-pattern, Fase 6) —
+        // so submitting the untouched initial order would NOT grade correct.
+        // Explicitly arrange the answer into the correct sequence instead of
+        // relying on the seeded display order to already match it.
+        $component = Livewire::actingAs($user)->test(UnitEvaluation::class, ['unit' => $unit]);
+        $component->set("quizAnswers.{$question->id}", $question->correct_answer);
+        $component->call('submitQuiz');
+
+        $component->assertSet('resultIsCorrect', true);
     }
 
     public function test_ordering_question_wrong_sequence_is_graded_incorrect_but_still_awards_points(): void
     {
         $user = $this->member();
-        $unit = Unit::where('title', 'Siklus Hidup Pengembangan Software (SDLC)')->firstOrFail();
+        $unit = Unit::where('title', 'Mekanisme Ketergantungan Antar Peran dalam Siklus Proyek')->firstOrFail();
         $question = $unit->evaluations()->firstOrFail();
 
         $component = Livewire::actingAs($user)->test(UnitEvaluation::class, ['unit' => $unit]);
@@ -146,8 +154,8 @@ class MatchingAndOrderingEvaluationTest extends TestCase
 
     public function test_matching_and_ordering_units_render_a_real_answerable_form_not_the_unsupported_message(): void
     {
-        $matchingUnit = Unit::where('title', 'Peran-Peran dalam Tim Development')->firstOrFail();
-        $orderingUnit = Unit::where('title', 'Siklus Hidup Pengembangan Software (SDLC)')->firstOrFail();
+        $matchingUnit = Unit::where('title', 'Struktur Peran dalam Tim Software')->firstOrFail();
+        $orderingUnit = Unit::where('title', 'Mekanisme Ketergantungan Antar Peran dalam Siklus Proyek')->firstOrFail();
         $user = $this->member();
 
         $matchingHtml = Livewire::actingAs($user)->test(UnitEvaluation::class, ['unit' => $matchingUnit])->html();

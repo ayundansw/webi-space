@@ -3,6 +3,7 @@
 namespace App\Livewire\Admin\Users;
 
 use App\Models\User;
+use App\Services\DualMode\DualModeService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Layout;
@@ -68,6 +69,22 @@ class Edit extends Component
 
         session()->flash('generated_password', $password);
         session()->flash('generated_password_user', $this->user->name);
+    }
+
+    /**
+     * Fase 8 Batch 5 (§5.3 "Cabut Akses"). All status mutation stays in
+     * DualModeService::revoke() (Batch 4) — that method already resets
+     * `active_mode` to null unconditionally whenever access is revoked,
+     * so a user currently active in Mode Eksekusi is never left stranded
+     * in a mode they no longer have access to. No change to that service
+     * was needed for this batch.
+     */
+    public function revokeDualModeAccess(DualModeService $service): void
+    {
+        $service->revoke($this->user, Auth::user());
+        $this->user->refresh();
+
+        session()->flash('status', "Akses Mode Eksekusi {$this->user->name} dicabut.");
     }
 
     public function render()

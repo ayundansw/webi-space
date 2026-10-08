@@ -24,10 +24,13 @@ class CheckpointShow extends Component
 
     public string $formTanggapan = '';
 
+    public bool $isReadOnlyExploration = false;
+
     public function mount(Checkpoint $checkpoint, ProgressService $progress): void
     {
         $this->checkpoint = $checkpoint;
         $user = Auth::user();
+        $this->isReadOnlyExploration = $user->isReadOnlyExploration();
 
         $this->unitsDone = $progress->allUnitsCompleted($checkpoint->module, $user);
 
@@ -38,6 +41,10 @@ class CheckpointShow extends Component
 
     public function submit(ProgressService $progress): void
     {
+        // Fase 8 Batch 3 (§2.2.A): checkpoint completion is progress, off
+        // limits for execution_member mode baca.
+        abort_if(Auth::user()->isReadOnlyExploration(), 403);
+
         $this->validate([
             'formTanggapan' => ['required', 'string'],
         ]);

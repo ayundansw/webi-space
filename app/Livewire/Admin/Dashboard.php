@@ -2,13 +2,17 @@
 
 namespace App\Livewire\Admin;
 
+use App\Models\DualModeRequest;
 use App\Models\GuardrailFlag;
 use App\Models\Message;
+use App\Models\Module;
 use App\Models\Project;
 use App\Models\ProgressUpdate;
 use App\Models\Task;
+use App\Models\Unit;
 use App\Models\User;
 use App\Services\Execution\AlertService;
+use App\Services\Execution\CalendarService;
 use App\Services\Exploration\ProgressService;
 use Illuminate\Support\Collection;
 use Livewire\Attributes\Layout;
@@ -18,7 +22,7 @@ use Livewire\Component;
 /**
  * Unified admin panel (PRD 3.0.3 / task 2.6 Batch 2): one dashboard combining
  * the Eksplorasi section (member progress + admin-only leaderboard, PRD
- * 3.0.3/3.1.4) and the Eksekusi section (docs/struktur-eksekusi.md Bagian 5,
+ * 3.0.3/3.1.4) and the Eksekusi section (docs/v_2.0/archive/sumber-konsolidasi/struktur-eksekusi.md Bagian 5,
  * PRD 3.2.9, built in 2.4) plus a quick-access summary into the WEBI log
  * (2.5's `/admin/webi`, PRD 3.0.3 "akses ke log percakapan WEBI"). Previously
  * this component only rendered the Eksekusi half — the pre-2.4 placeholder
@@ -28,7 +32,7 @@ use Livewire\Component;
 #[Title('Dashboard Admin')]
 class Dashboard extends Component
 {
-    public function render(AlertService $alerts, ProgressService $progress)
+    public function render(AlertService $alerts, ProgressService $progress, CalendarService $calendar)
     {
         $projects = Project::whereIn('status', ['active', 'on_hold'])->get();
 
@@ -39,7 +43,32 @@ class Dashboard extends Component
             'memberSummaries' => $this->memberSummaries(),
             'explorationLeaderboard' => $this->explorationLeaderboard($progress),
             'webiSummary' => $this->webiSummary(),
+            'curriculumSummary' => $this->curriculumSummary(),
+            'dualModePendingCount' => DualModeRequest::where('status', 'pending')->count(),
+            // Task 8 (Tahap B, Isi Proyek revisi): widget kalender terpadu,
+            // menggabungkan Kegiatan+Acara SEMUA proyek (bukan cuma satu),
+            // sumber sama dengan yang dipakai Dashboard Eksekusi/Kalender
+            // Personal, cuma method-nya app-wide (lihat docblock
+            // CalendarService::upcomingAcrossAllProjects()).
+            'upcomingCalendarItems' => $calendar->upcomingAcrossAllProjects(5),
         ]);
+    }
+
+    /**
+     * Fase 4 Batch 1: same shape as webiSummary() below — small private
+     * method, plain array, rendered as one summary card + a "lihat detail"
+     * link into /admin/curriculum. unitsWithContentBlocks counts units that
+     * already have at least one Editor Blok Konten block (Batch 2); the gap
+     * against unitCount is how many units still only have the legacy plain
+     * `content` column.
+     */
+    private function curriculumSummary(): array
+    {
+        return [
+            'module_count' => Module::count(),
+            'unit_count' => Unit::count(),
+            'units_with_content_blocks' => Unit::whereHas('contentBlocks')->count(),
+        ];
     }
 
     /**
@@ -87,7 +116,11 @@ class Dashboard extends Component
 
     private function projectSummary(Project $project): array
     {
+        // Fase 7 Batch 2a audit: filtered to task besar only — this feeds
+        // "active_members" on the admin project overview card, same
+        // task-besar-rollup category as progressPercentage() below.
         $activeMemberIds = Task::where('project_id', $project->id)
+            ->whereNull('parent_task_id')
             ->whereIn('status', ['in_progress', 'in_review'])
             ->with('assignments')
             ->get()
@@ -148,6 +181,11 @@ class Dashboard extends Component
     private function memberSummaries(): Collection
     {
         return User::where('role', 'execution_member')->get()->map(function (User $member) {
+            // Fase 7 Batch 2a audit: NOT filtered to whereNull('parent_task_id')
+            // — this is admin's per-member breakdown of "tasks assigned to
+            // this member", same personal-workload category as
+            // Eksekusi\Dashboard's own taskCounts. Confirmed decision
+            // (2026-07-12), see AlertService docblock.
             $tasks = Task::whereHas('assignments', fn ($q) => $q->where('user_id', $member->id))->get();
 
             $lastUpdate = ProgressUpdate::where('user_id', $member->id)->max('created_at');

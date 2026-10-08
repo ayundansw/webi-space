@@ -11,11 +11,15 @@ use Livewire\Attributes\Title;
 use Livewire\Component;
 
 /**
- * Kanban board is a view layer only (docs/struktur-eksekusi.md 3.6 note) — it
- * reads Task.status and groups into columns, no separate board entity. Status
- * changes here use buttons rather than drag-and-drop: more stable to build
- * and test right now (per explicit instruction), same underlying
- * TaskService::changeStatus() used by the task detail page.
+ * Kanban board is a view layer only — reads Task.status, groups into
+ * columns via buttons (not drag-and-drop), same TaskService::changeStatus()
+ * used by the task detail page. Routed as the "Kanban" tab.
+ *
+ * SECURITY: `project.member` middleware checks membership only — openTask()
+ * and the `?task=` query param are the ONLY guard against opening a task
+ * from another project, so both MUST validate against $this->project.
+ * Task lookups also filter to task besar only; subtasks never appear here,
+ * only nested inside their parent task's panel.
  */
 #[Layout('components.layouts.app')]
 #[Title('Kanban Board')]
@@ -23,20 +27,34 @@ class Board extends Component
 {
     public Project $project;
 
+    public ?string $openTaskId = null;
+
     public function mount(Project $project): void
     {
-        $user = Auth::user();
-
-        if ($user->role !== 'admin' && ! $project->members()->where('user_id', $user->id)->exists()) {
-            abort(403);
-        }
-
         $this->project = $project;
+
+        $queryTaskId = request()->query('task');
+
+        if (is_string($queryTaskId) && $project->tasks()->whereNull('parent_task_id')->where('id', $queryTaskId)->exists()) {
+            $this->openTaskId = $queryTaskId;
+        }
+    }
+
+    public function openTask(string $taskId): void
+    {
+        if ($this->project->tasks()->whereNull('parent_task_id')->where('id', $taskId)->exists()) {
+            $this->openTaskId = $taskId;
+        }
+    }
+
+    public function closeTaskPanel(): void
+    {
+        $this->openTaskId = null;
     }
 
     public function changeStatus(string $taskId, string $newStatus, TaskService $service): void
     {
-        $task = $this->project->tasks()->findOrFail($taskId);
+        $task = $this->project->tasks()->whereNull('parent_task_id')->findOrFail($taskId);
 
         try {
             $service->changeStatus($task, $newStatus, Auth::user());
@@ -47,7 +65,7 @@ class Board extends Component
 
     public function render()
     {
-        $tasks = $this->project->tasks()->with(['assignments.user', 'milestone'])->orderBy('deadline')->get();
+        $tasks = $this->project->tasks()->whereNull('parent_task_id')->with(['assignments.user', 'milestone'])->orderBy('deadline')->get();
 
         $columns = [
             'todo' => $tasks->where('status', 'todo')->values(),
@@ -56,6 +74,9 @@ class Board extends Component
             'done' => $tasks->where('status', 'done')->values(),
         ];
 
-        return view('livewire.eksekusi.projects.board', ['columns' => $columns]);
+        return view('livewire.eksekusi.projects.board', [
+            'columns' => $columns,
+            'openTask' => $this->openTaskId ? $this->project->tasks()->whereNull('parent_task_id')->find($this->openTaskId) : null,
+        ]);
     }
 }

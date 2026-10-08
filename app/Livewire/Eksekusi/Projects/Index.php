@@ -3,6 +3,7 @@
 namespace App\Livewire\Eksekusi\Projects;
 
 use App\Models\Project;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
@@ -22,6 +23,30 @@ class Index extends Component
             $query->whereHas('members', fn ($q) => $q->where('user_id', $user->id));
         }
 
-        return view('livewire.eksekusi.projects.index', ['projects' => $query->get()]);
+        $projects = $query->get();
+
+        return view('livewire.eksekusi.projects.index', [
+            'projects' => $projects,
+            'summary' => $this->summary($projects),
+        ]);
+    }
+
+    /**
+     * Task 2 (Tahap B, Isi Proyek): summary card above the list — same
+     * $projects collection the list itself renders (already scoped to
+     * admin-sees-all vs member-sees-own above), so the numbers here can
+     * never drift from what's actually listed below.
+     */
+    private function summary(Collection $projects): array
+    {
+        $statuses = ['planning', 'active', 'on_hold', 'completed', 'archived'];
+
+        return [
+            'total' => $projects->count(),
+            'by_status' => collect($statuses)->mapWithKeys(
+                fn (string $status) => [$status => $projects->where('status', $status)->count()]
+            )->all(),
+            'average_progress' => $projects->isEmpty() ? 0 : (int) round($projects->avg(fn (Project $p) => $p->progressPercentage())),
+        ];
     }
 }

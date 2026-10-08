@@ -16,8 +16,12 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  * 2.8) with zero access control: anyone with the URL could view/download a
  * task attachment regardless of login or project membership. This route
  * replaces that with an authenticated, membership-checked stream, mirroring
- * the exact access rule already used by `App\Livewire\Eksekusi\Tasks\Show::mount()`
- * (admin, or a member of the same project) — not a new access pattern.
+ * the exact access rule consolidated into `App\Http\Middleware\EnsureProjectMembership`
+ * (Fase 7 Batch 1a) — admin, or a member of the same project. Kept as its
+ * own inline check rather than reusing that middleware directly: this
+ * route is keyed by {attachment}, not {project}/{task}, so the middleware
+ * (which only knows how to resolve those two) can't sit in front of it
+ * as-is.
  */
 class AttachmentDownloadController extends Controller
 {

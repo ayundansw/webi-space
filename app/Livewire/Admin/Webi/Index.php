@@ -11,7 +11,7 @@ use Livewire\Attributes\Title;
 use Livewire\Component;
 
 /**
- * docs/spesifikasi-webi.md 5.3 / docs/PRD.md 3.2.9 (Eksekusi's dashboard) and
+ * docs/v_2.0/archive/sumber-konsolidasi/spesifikasi-webi.md 5.3 / docs/v_2.0/archive/sumber-konsolidasi/PRD.md 3.2.9 (Eksekusi's dashboard) and
  * 3.0.3 ("Akses ke log percakapan WEBI dan guardrail flag") — per-member
  * summary for admin monitoring. Reached both directly (`/admin/webi`) and via
  * the "Lihat semua log" quick-access link on the unified `/admin/dashboard`

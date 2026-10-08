@@ -53,6 +53,26 @@ class CurriculumNavigationTest extends TestCase
             ->assertDontSee('belum bisa dibuka');
     }
 
+    /**
+     * Fase 4 Batch 2a: proves the admin Editor Blok Konten's output is
+     * actually visible on the member-facing Materi page, not just persisted
+     * to the database. A unit with content_blocks rows renders them via
+     * <x-content-blocks> INSTEAD OF the legacy plain-text `content` column.
+     */
+    public function test_unit_with_content_blocks_renders_them_instead_of_legacy_text(): void
+    {
+        $user = $this->member();
+        $unit = Unit::where('order_number', 1)->whereHas('module', fn ($q) => $q->where('order_number', 1))->first();
+        $unit->contentBlocks()->create(['type' => 'heading', 'content' => ['level' => 2, 'text' => 'Judul Blok Baru'], 'order' => 1]);
+        $unit->contentBlocks()->create(['type' => 'text', 'content' => ['markdown' => 'Paragraf dari blok konten baru.'], 'order' => 2]);
+
+        $response = $this->actingAs($user)->get('/eksplorasi/unit/'.$unit->id)->assertOk();
+
+        $response->assertSee('Judul Blok Baru')
+            ->assertSee('Paragraf dari blok konten baru.')
+            ->assertDontSee($unit->content);
+    }
+
     public function test_second_unit_is_locked_until_first_completed(): void
     {
         $user = $this->member();
@@ -100,6 +120,71 @@ class CurriculumNavigationTest extends TestCase
             ->assertOk()
             ->assertSee('Checklist Akhir Modul')
             ->assertDontSee('Belum semua unit selesai');
+    }
+
+    /**
+     * Bagian B (Fase 3): kolom kiri "Daftar Isi Modul" dibangun dari nol --
+     * membuktikan seluruh unit di modul yang sama muncul (bukan cuma unit
+     * yang sedang dibuka), dengan status locked/completed/in_progress yang
+     * benar dari ProgressService yang sama dipakai Peta Kurikulum.
+     */
+    public function test_unit_page_shows_table_of_contents_for_every_unit_in_the_same_module(): void
+    {
+        $user = $this->member();
+        $moduleA = Module::where('order_number', 1)->first();
+        $units = $moduleA->units()->orderBy('order_number')->get();
+
+        app(ProgressService::class)->completeUnit($user, $units[0]);
+
+        $response = $this->actingAs($user)->get('/eksplorasi/unit/'.$units[1]->id);
+
+        $response->assertOk();
+        // Every unit title in module A must appear in the TOC, not just the
+        // one currently open (units[1]).
+        foreach ($units as $unit) {
+            $response->assertSee($unit->title);
+        }
+    }
+
+    /**
+     * Bagian B: "stack poin progres" -- progres modul + total poin user,
+     * dibaca dari ProgressService (moduleProgressPercentage/ensureProgress),
+     * bukan angka baru yang dihitung ulang.
+     */
+    public function test_unit_page_shows_module_progress_percentage_and_total_points(): void
+    {
+        $user = $this->member();
+        $moduleA = Module::where('order_number', 1)->first();
+        $units = $moduleA->units()->orderBy('order_number')->get();
+        $progressService = app(ProgressService::class);
+
+        $progressService->completeUnit($user, $units[0]);
+        $moduleProgress = $progressService->moduleProgressPercentage($moduleA, $user);
+        $userProgress = $progressService->ensureProgress($user);
+
+        $response = $this->actingAs($user)->get('/eksplorasi/unit/'.$units[1]->id);
+
+        $response->assertOk()
+            ->assertSee($moduleProgress.'%')
+            ->assertSee((string) $userProgress->total_points);
+    }
+
+    /**
+     * Bagian B: mekanisme slide-over lama (webiPanelOpen, FAB "Tanya WEBI"
+     * fixed bottom-right) dibongkar total, diganti kolom WEBI + strip
+     * toggle bawah -- ini membuktikan komponen chat tetap ter-embed dan
+     * berfungsi (bukan dihapus tanpa pengganti).
+     */
+    public function test_unit_page_still_embeds_webi_chat_and_removes_old_slideover_markup(): void
+    {
+        $user = $this->member();
+        $unit = Unit::where('order_number', 1)->whereHas('module', fn ($q) => $q->where('order_number', 1))->first();
+
+        $response = $this->actingAs($user)->get('/eksplorasi/unit/'.$unit->id);
+
+        $response->assertOk()
+            ->assertSee('Chat WEBI')
+            ->assertDontSee('webiPanelOpen', false);
     }
 
     public function test_non_exploration_member_cannot_access_kurikulum(): void

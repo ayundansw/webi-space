@@ -61,7 +61,7 @@ class DashboardTest extends TestCase
             ->assertSee('Log Percakapan WEBI');
     }
 
-    public function test_leaderboard_ranks_members_by_points_descending_and_is_never_shown_to_members(): void
+    public function test_admin_leaderboard_ranks_members_by_points_descending_and_member_also_sees_their_own(): void
     {
         $admin = $this->admin();
         $progress = $this->app->make(ProgressService::class);
@@ -86,8 +86,11 @@ class DashboardTest extends TestCase
         $this->assertNotFalse($posLow);
         $this->assertLessThan($posLow, $posHigh, 'Anggota dengan poin lebih tinggi (Bilal) harus muncul lebih dulu di leaderboard daripada Dipa.');
 
-        // PRD 2.1: exploration_member never sees the leaderboard, only their own dashboard.
-        $this->actingAs($low)->get('/eksplorasi/dashboard')->assertOk()->assertDontSee('Leaderboard');
+        // v2.0 (2.2.2c) overturns the old v1.0 rule ("exploration_member
+        // never sees the leaderboard") — members now see a privacy-conscious
+        // Top 5 + their own rank on their own dashboard. Admin's own
+        // full-roster leaderboard above is unaffected/unchanged.
+        $this->actingAs($low)->get('/eksplorasi/dashboard')->assertOk()->assertSee('Leaderboard');
     }
 
     public function test_exploration_progress_shown_to_admin_matches_the_members_own_dashboard(): void

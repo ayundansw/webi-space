@@ -4,23 +4,20 @@ namespace App\Services\Webi;
 
 use App\Models\Conversation;
 use App\Models\Message;
+use App\Models\Unit;
 use App\Models\User;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 
 /**
- * Orchestrates one reactive chat turn (docs/spesifikasi-webi.md 3.1, Mode A).
- * Extended across task 2.5's batches:
- * - Batch 2: conversation/session handling, message persistence, plain Gemini call.
- * - Batch 3: guardrail (system prompt tier + backend output validation + rate limit).
- * - Batch 4: personalization context injection.
- * - Batch 5: proactive greetings reuse activeConversationFor()/history().
+ * Orchestrates one reactive chat turn (spesifikasi-webi.md 3.1, Mode A):
+ * conversation/session handling, message persistence, Gemini call,
+ * guardrail validation, personalization context injection, and
+ * proactive-greeting reuse of activeConversationFor()/history().
  *
- * Batch 3 note: [EVALUATION_BANK] scoping needs to know the user's current unit,
- * which is technically progress/personalization data (Batch 4's territory) —
- * but the guardrail can't function without it, so this batch reads ONLY
- * current_unit_id (not the full USER_CONTEXT block: level, points, interest_field,
- * completed_units) to scope which evaluation questions to inject. Batch 4 adds
- * the rest. Flagged as a sequencing note in the task 2.5 report.
+ * [EVALUATION_BANK] scoping reads ONLY current_unit_id, not the full
+ * USER_CONTEXT block — the guardrail can't function without the current
+ * unit, the rest of personalization is injected separately.
  */
 class ChatService
 {
@@ -35,7 +32,7 @@ class ChatService
 
     /**
      * A new session starts when the gap since the last message exceeds the
-     * configured timeout (docs/spesifikasi-webi.md 2.1) — otherwise the user
+     * configured timeout (docs/v_2.0/archive/sumber-konsolidasi/spesifikasi-webi.md 2.1) — otherwise the user
      * keeps talking in their existing conversation.
      */
     public function activeConversationFor(User $user): Conversation
@@ -53,6 +50,42 @@ class ChatService
             'started_at' => now(),
             'last_message_at' => now(),
         ]);
+    }
+
+    /**
+     * Redesign halaman WEBI Chat penuh (sidebar "Percakapan Baru"):
+     * activeConversationFor() di atas SENGAJA reuse sesi yang masih dalam
+     * window waktu aktif -- itu perilaku yang benar untuk "lanjutkan
+     * ngobrol", tapi salah untuk tombol yang eksplisit dilabeli "Baru".
+     * Method ini SELALU membuat Conversation baru, tidak pernah reuse --
+     * satu-satunya bedanya dari activeConversationFor() adalah tidak ada
+     * pengecekan sesi lama sama sekali.
+     */
+    public function startNewConversationFor(User $user): Conversation
+    {
+        return Conversation::create([
+            'user_id' => $user->id,
+            'started_at' => now(),
+            'last_message_at' => now(),
+        ]);
+    }
+
+    /**
+     * 2.2.3 (riwayat percakapan): a user's past sessions, newest first, each
+     * with its messages eager-loaded so callers can build a lightweight
+     * preview (first message, count) without N+1 — safe at personal scale
+     * (one user's own conversation count), unlike the admin-wide monitoring
+     * queries elsewhere which page through many users at once.
+     *
+     * @return Collection<int, Conversation>
+     */
+    public function pastConversationsFor(User $user, ?string $excludeConversationId = null): Collection
+    {
+        return Conversation::where('user_id', $user->id)
+            ->when($excludeConversationId, fn ($query) => $query->where('id', '!=', $excludeConversationId))
+            ->with(['messages' => fn ($query) => $query->orderBy('created_at')])
+            ->orderByDesc('started_at')
+            ->get();
     }
 
     /**
@@ -76,7 +109,7 @@ class ChatService
     }
 
     /**
-     * docs/PRD.md 5.10 / docs/spesifikasi-webi.md 5.2: max messages per user per
+     * docs/v_2.0/archive/sumber-konsolidasi/PRD.md 5.10 / docs/v_2.0/archive/sumber-konsolidasi/spesifikasi-webi.md 5.2: max messages per user per
      * day, counted across all of the user's conversations (not just the active one).
      */
     public function messagesSentToday(User $user): int
@@ -88,10 +121,18 @@ class ChatService
     }
 
     /**
+     * @param  ?Unit  $contextUnit  2.2.3 (WEBI kontekstual): explicit unit the
+     *      message was sent about — passed when Chat is embedded in a slide-over
+     *      on a unit page (App\Livewire\Eksplorasi\UnitShow), so WEBI discusses
+     *      THAT unit regardless of what the user's global "current unit"
+     *      (UserExplorationProgress.current_unit_id) happens to be. Left null
+     *      for the default full-chat-page path, which keeps its exact prior
+     *      behavior: falls back to $user->explorationProgress?->currentUnit.
+     *
      * @throws RateLimitExceededException
      * @throws GeminiApiException
      */
-    public function sendMessage(User $user, Conversation $conversation, string $text, bool $voiceMode = false): Message
+    public function sendMessage(User $user, Conversation $conversation, string $text, bool $voiceMode = false, ?Unit $contextUnit = null): Message
     {
         $limit = config('webi.daily_message_limit');
 
@@ -102,7 +143,7 @@ class ChatService
         }
 
         $history = $this->historyFor($conversation);
-        $currentUnit = $user->explorationProgress?->currentUnit;
+        $currentUnit = $contextUnit ?? $user->explorationProgress?->currentUnit;
         $evaluationBank = $this->bankBuilder->build($currentUnit);
 
         $userMessage = Message::create([
@@ -137,7 +178,7 @@ class ChatService
 
         if ($outputMatch) {
             // Retry once with an explicit correction instruction, per
-            // docs/spesifikasi-webi.md 5.2.
+            // docs/v_2.0/archive/sumber-konsolidasi/spesifikasi-webi.md 5.2.
             $retryPrompt = $systemPrompt."\n\nRespons sebelumnya terdeteksi mengandung jawaban evaluasi. Ulangi tanpa memberikan jawaban langsung.";
             $retryReplyText = $this->stripInternalArtifacts($this->gemini->generate($retryPrompt, $history, $text));
 

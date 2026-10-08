@@ -27,9 +27,28 @@ class UnitEvaluation extends Component
 
     public ?string $nextUnitTitle = null;
 
+    /**
+     * "Skor terbaik" (2.2.3 v2.0), Opsi Sederhana: a boolean mastery flag,
+     * not a numeric score. Only meaningful for quiz types (quiz_multiple_choice/
+     * quiz_matching/quiz_ordering) — essay/practice have no correct/incorrect
+     * concept at all (is_correct is always null for those), so they never
+     * carry mastery. Computed fresh from ALL of the user's past submissions
+     * on this unit (see refreshMasteryStatus()), so it never turns back off
+     * once earned, even if a later retry is wrong.
+     */
+    public bool $isMastered = false;
+
+    /**
+     * Fase 8 Batch 3: set once in mount(), read by every write action below
+     * AND by the blade (public property, no extra render() wiring needed)
+     * to show a notice instead of the interactive form.
+     */
+    public bool $isReadOnlyExploration = false;
+
     public function mount(Unit $unit): void
     {
         $this->unit = $unit;
+        $this->isReadOnlyExploration = Auth::user()->isReadOnlyExploration();
 
         // Matching/ordering need a starting shape to bind the form to — matching
         // starts empty (nothing paired yet), ordering starts as the seeded option
@@ -53,6 +72,28 @@ class UnitEvaluation extends Component
         if ($submission) {
             $this->showResultFor($submission);
         }
+
+        $this->refreshMasteryStatus();
+    }
+
+    /**
+     * OR-logic over every submission ever made for this unit — mastery
+     * turns on the moment ANY attempt was fully correct, and (by construction,
+     * since this only ever checks for existence of a true row, never absence)
+     * can never turn back off because of a later wrong retry.
+     */
+    private function refreshMasteryStatus(): void
+    {
+        if (! in_array($this->unit->evaluation_type, ['quiz_multiple_choice', 'quiz_matching', 'quiz_ordering'], true)) {
+            $this->isMastered = false;
+
+            return;
+        }
+
+        $this->isMastered = EvaluationSubmission::where('user_id', Auth::id())
+            ->where('unit_id', $this->unit->id)
+            ->where('is_correct', true)
+            ->exists();
     }
 
     /**
@@ -76,6 +117,11 @@ class UnitEvaluation extends Component
 
     public function submitQuiz(ProgressService $progress): void
     {
+        // Fase 8 Batch 3 (§2.2.A): execution_member mode baca "TIDAK bisa
+        // submit kuis/evaluasi" — checked first, before any validation, so
+        // a crafted request can't even trigger a validation error path.
+        abort_if(Auth::user()->isReadOnlyExploration(), 403);
+
         $questions = $this->unit->evaluations()->orderBy('sort_order')->get();
 
         $rules = [];
@@ -90,7 +136,18 @@ class UnitEvaluation extends Component
             '*.required' => 'Yuk pilih salah satu jawaban dulu sebelum lanjut.',
         ]);
 
-        $isFirstAttempt = ! EvaluationSubmission::where('user_id', Auth::id())
+        // Whether THIS submission is the one that actually earns fresh
+        // participation points via completeUnit()'s idempotent
+        // UserUnitProgress.status check (true only for the very first
+        // submission ever on this unit — completeUnit() is called
+        // unconditionally below regardless of correctness, so the unit
+        // is always already `completed` by the time any later retry runs
+        // this same check). This is NOT a correctness judgment (that's
+        // $allCorrect, graded independently below) and NOT related to
+        // mastery status (that's tracked separately in refreshMasteryStatus()
+        // and can only ever turn on, never off, unlike this flag which is
+        // just archival bookkeeping of when points were actually granted).
+        $isFirstSubmissionForThisUnit = ! EvaluationSubmission::where('user_id', Auth::id())
             ->where('unit_id', $this->unit->id)
             ->exists();
 
@@ -118,11 +175,12 @@ class UnitEvaluation extends Component
             'unit_id' => $this->unit->id,
             'answers' => $answersPayload,
             'is_correct' => $allCorrect,
-            'points_awarded' => $isFirstAttempt ? $this->unit->point_value : 0,
+            'points_awarded' => $isFirstSubmissionForThisUnit ? $this->unit->point_value : 0,
         ]);
 
         $progress->completeUnit(Auth::user(), $this->unit);
 
+        $this->refreshMasteryStatus();
         $this->showResultFor($submission);
     }
 
@@ -149,6 +207,8 @@ class UnitEvaluation extends Component
 
     public function submitFreeText(ProgressService $progress): void
     {
+        abort_if(Auth::user()->isReadOnlyExploration(), 403);
+
         $this->validate([
             'freeTextAnswer' => ['required', 'string', 'min:3'],
         ], [], [
@@ -172,6 +232,8 @@ class UnitEvaluation extends Component
 
     public function markAsRead(ProgressService $progress): void
     {
+        abort_if(Auth::user()->isReadOnlyExploration(), 403);
+
         $progress->completeUnit(Auth::user(), $this->unit);
 
         $this->mode = 'result';

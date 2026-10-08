@@ -10,10 +10,10 @@
                 wire:model="email"
                 autofocus
                 autocomplete="username"
-                class="w-full rounded-lg border border-muted/40 px-3 py-2 text-sm focus:border-accent focus:outline-none"
+                class="w-full rounded-control border border-border px-3 py-2 text-sm focus:border-accent focus:outline-none"
             >
             @error('email')
-                <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                <p class="mt-1 text-sm text-danger">{{ $message }}</p>
             @enderror
         </div>
 
@@ -24,17 +24,17 @@
                 id="password"
                 wire:model="password"
                 autocomplete="current-password"
-                class="w-full rounded-lg border border-muted/40 px-3 py-2 text-sm focus:border-accent focus:outline-none"
+                class="w-full rounded-control border border-border px-3 py-2 text-sm focus:border-accent focus:outline-none"
             >
             @error('password')
-                <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                <p class="mt-1 text-sm text-danger">{{ $message }}</p>
             @enderror
         </div>
 
         <button
             type="submit"
             wire:loading.attr="disabled"
-            class="w-full rounded-lg bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-ink/90 disabled:opacity-60"
+            class="w-full rounded-control bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-ink/90 disabled:opacity-60"
         >
             <span wire:loading.remove>Masuk</span>
             <span wire:loading>Memproses...</span>

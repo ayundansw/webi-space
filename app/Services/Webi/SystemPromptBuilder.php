@@ -5,7 +5,7 @@ namespace App\Services\Webi;
 use Illuminate\Support\Collection;
 
 /**
- * Builds the system prompt sent to Gemini on every request. docs/spesifikasi-webi.md
+ * Builds the system prompt sent to Gemini on every request. docs/v_2.0/archive/sumber-konsolidasi/spesifikasi-webi.md
  * 5.1 splits this into a static part (persona/domain/guardrail instructions, same
  * for every user and request) and a dynamic part (per-request context injection).
  * Assembled incrementally across task 2.5's batches:
@@ -81,7 +81,7 @@ PROMPT;
     }
 
     /**
-     * Condensed from docs/spesifikasi-webi.md 2.2's worked examples into an
+     * Condensed from docs/v_2.0/archive/sumber-konsolidasi/spesifikasi-webi.md 2.2's worked examples into an
      * instruction the model can follow given [USER_CONTEXT].
      */
     public function personalizationInstructions(): string
